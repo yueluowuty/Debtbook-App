@@ -2,9 +2,8 @@
 
 为什么需要这个脚本，而不是直接敲 `flutter run`：
 
-1. 项目目录含中文，安卓侧 NDK/CMake 构建会失败，所以构建必须在 ASCII 镜像目录
-   （默认 D:\\projects\\debtbook）里做。镜像的 lib 是一个目录联接，指向本仓库的
-   lib，所以改这里就是改那边，不需要任何同步步骤。
+1. 历史原因（中文路径需要 ASCII 镜像构建）已随目录改名 `debtbook-app` 消失，
+   构建默认就在本仓库做；`--mirror` 保留，仍可把构建目录指到别处。
 2. `flutter run` 的热重载靠按键盘 r，非交互环境下拿不到 TTY；这里走
    `flutter run --machine` 协议，用 app.restart 触发同样的重载。
    注意协议帧格式：每行是一个 JSON **数组**，发裸对象不会有任何回包。
@@ -29,7 +28,7 @@ import time
 
 FLUTTER_BAT = r"D:\apps\flutter_windows_3.47.2-stable\flutter\bin\flutter.bat"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MIRROR = os.environ.get("DEBTBOOK_MIRROR", r"D:\projects\debtbook")
+MIRROR = os.environ.get("DEBTBOOK_MIRROR") or REPO  # 默认就在本仓库构建
 WATCH_DIRS = ["lib", "pubspec.yaml"]
 POLL_SECONDS = 0.4
 

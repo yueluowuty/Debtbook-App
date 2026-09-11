@@ -1,7 +1,8 @@
 # 欠款台账（debtbook）
 
 记录「谁欠我多少钱 / 我欠谁多少钱 / 什么时候还了多少」的本地记账 App。
-纯离线，不联网，没有云数据库，数据只在这台手机的文件里。
+纯离线：数据只在这台手机的文件里，唯一的出网动作是用户在「备份与恢复」页
+**手动点击**「检查更新」（GitHub Releases API + APK 直链），不点则零请求。
 
 ## 对应三条诉求
 
@@ -16,40 +17,29 @@
 
 ## 装 APK
 
-已构建好的 debug 包就放在项目根目录：**`debtbook-debug.apk`**（约 186 MB）。
+**推荐渠道：GitHub Releases**（本仓库 `Releases` 页），例如 `debtbook_v1.0.1.apk`（约 53 MB，
+三 ABI 合一的 release 包）。App 内「备份与恢复 → 版本更新」可直接检查并调起安装。
 传到手机后直接点开安装，需要允许「安装未知来源应用」。
 
-体积大是因为这是 debug 包：带全部 ABI 的 native 库、不混淆不裁剪、附带调试信息。自用无妨。
+> ⚠️ release 包目前用 **debug key 签名**。将来若换正式 keystore，旧包必须先卸载（数据会丢，
+> 先导出 JSON 快照再装新包）。仓库公开只是为匿名检查更新可用，APK 本身无保密需求。
 
-### 重新构建：必须在纯 ASCII 路径下进行
+根目录如果存在 `debtbook-debug.apk`，那是本地调试产物，可能过时，不要拿它当发布物。
 
-**当前这个目录（`D:\projects\记账本app`）构建不出 APK。** 实测原因：
+### 构建
 
-1. AGP 一上来就因路径含非 ASCII 直接拒绝构建；
-2. 加 `android.overridePathCheck=true` 跳过后，Kotlin 增量编译在中文路径下
-   关不掉它的 `.tab` 缓存文件（报错里路径已经是乱码）；
-3. 再加 `kotlin.incremental=false` 跳过后，`file_picker` 带来的 `jni` 模块
-   走 NDK/CMake 编译，**产不出 `libdartjni.so`**，构建仍然失败。
-
-前两个开关已经留在 `android/gradle.properties` 里（有注释），但它们不够 ——
-CMake 那关只能靠 ASCII 路径。所以本项目有一份构建镜像：
+项目目录已迁到纯 ASCII 路径 `D:\projects\debtbook-app`，**直接在本仓库构建即可**：
 
 ```bash
-# 首次：镜像一份源码（不含 build/ 与 .dart_tool/）
-cp -a /d/projects/记账本app /d/projects/debtbook
-cd /d/projects/debtbook
-D:/apps/flutter_windows_3.47.2-stable/flutter/bin/flutter.bat build apk --debug
-
-# 改完代码后同步再构建
-cp -a /d/projects/记账本app/lib /d/projects/debtbook/
-cp -a /d/projects/记账本app/android /d/projects/debtbook/
-cp /d/projects/记账本app/pubspec.yaml /d/projects/debtbook/
-# 产物取回
-cp /d/projects/debtbook/build/app/outputs/flutter-apk/app-debug.apk /d/projects/记账本app/debtbook-debug.apk
+D:/apps/flutter_windows_3.47.2-stable/flutter/bin/flutter.bat build apk --release
+# 产物：build/app/outputs/flutter-apk/app-release.apk
 ```
 
-**改代码仍然只改 `D:\projects\记账本app`**，`debtbook` 只是构建用的副本，别在那儿编辑。
-如果你愿意把项目本身挪到一个 ASCII 目录，这层副本就不需要了。
+历史背景：项目曾放在中文路径 `D:\projects\记账本app`，当时 AGP 拒绝非 ASCII 路径、
+Kotlin `.tab` 缓存关不掉、`file_picker` 的 jni 模块在 NDK/CMake 下产不出 `libdartjni.so`，
+所以曾靠一份 ASCII 镜像目录（`D:\projects\debtbook`，其 `lib` 是指回中文目录的 junction）构建。
+2026-09-12 起目录已改名去中文，镜像废弃。`android/gradle.properties` 里
+`android.overridePathCheck` / `kotlin.incremental` 两个历史开关已无必要，留着无害。
 
 ## 在电脑上预览（Android 模拟器）
 
@@ -65,7 +55,8 @@ D:/Android/sdk/cmdline-tools/latest/bin/avdmanager.bat create avd -n debtbook \
 # 每次预览：窗口保持开着
 D:/Android/sdk/emulator/emulator.exe -avd debtbook -gpu auto -no-snapshot-save
 D:/Android/sdk/platform-tools/adb.exe wait-for-device
-D:/Android/sdk/platform-tools/adb.exe install -r -g /d/projects/记账本app/debtbook-debug.apk
+D:/Android/sdk/platform-tools/adb.exe install -r -g \
+  /d/projects/debtbook-app/build/app/outputs/flutter-apk/app-debug.apk
 D:/Android/sdk/platform-tools/adb.exe shell monkey -p com.lishuncai.debtbook \
   -c android.intent.category.LAUNCHER 1
 ```
@@ -76,9 +67,8 @@ AMD 平台只能走 WHPX，`emulator.exe -accel-check` 实测输出
 关掉窗口再重开，App 数据完好（SQLite 在 AVD 的 userdata 里，`-no-snapshot-save`
 只影响内存快照，实测热重启约 18 秒）。**别加 `-wipe-data`**，那会清空数据。
 
-**两条路都能跑，用途不同**：中文路径只是**不能在那个目录里直接构建**（安卓侧
-NDK/CMake 过不去），换到 ASCII 镜像目录 `D:\projects\debtbook` 里 `flutter run` 是通的。
-所以：只想看一眼就 `adb install` 现成 APK（完全绕开构建）；要改代码就走下面那条回路。
+**两条路都能跑，用途不同**：只想看一眼就 `adb install` 现成 APK（完全绕开构建）；
+要改代码就走下面那条热重载回路，或者直接在本目录 `flutter run`（ASCII 路径下构建是通的）。
 debug 包里带 `lib/x86_64/libdartjni.so`，x86_64 镜像能跑。
 
 两个不是 bug 的现象：
@@ -101,16 +91,14 @@ D:/Android/sdk/platform-tools/adb.exe shell \
 D:/Android/sdk/emulator/emulator.exe -avd debtbook -gpu host -no-snapshot-save
 
 # 2. 起回路：构建 + 安装 + 启动，之后盯着 lib/ 改
-python D:/projects/记账本app/tool/dev_run.py
+python D:/projects/debtbook-app/tool/dev_run.py
 ```
 
 改任意 `lib/**/*.dart` 存盘，约 0.5 秒后设备上就刷新（实测 `Reloaded 1 of 1714
-libraries in 430~573ms`）。三个不显然的前提：
+libraries in 430~573ms`）。几条不显然的前提：
 
-1. **镜像的 `lib` 是一个目录联接（Junction），指向本仓库的 `lib`**。
-   所以改这里就是改那边，**没有任何同步步骤**；`test/` 仍是普通拷贝，
-   跑测试前需要 `cp -r` 一次（测试在本仓库目录跑，本来也不受中文路径影响）。
-   重建联接：`New-Item -ItemType Junction -Path 'D:\projects\debtbook\lib' -Target 'D:\projects\记账本app\lib'`。
+1. ~~镜像的 `lib` 是目录联接~~ —— 目录改名成 ASCII 后已不需要镜像，
+   脚本直接在本仓库构建（`--mirror` 参数保留，可指到别处）。
 2. **热重载走的是 `flutter run --machine` 的 `app.restart`**。
    直接往 `flutter run` 的 stdin 灌字符 `r` 是没用的 —— 它检测到自己不在 TTY 上，
    根本不进交互模式。
@@ -179,7 +167,7 @@ libraries in 430~573ms`）。三个不显然的前提：
   **只算一侧**：应收侧的「已还」是他还我，应付侧的「已还」是我还他，
   两边混成一个比值没有意义，所以取借款额更大的那侧单独算并在标题里写明。
   超付时进度条画满，但百分比照实写 120%，不藏。
-- App 版本在「备份与恢复」页底部展示（`v1.0.0（build 1）`）。
+- App 版本在「备份与恢复」页底部展示（`v1.0.1（build 2）`）。
   值手写在 `lib/app_info.dart`，由 `test/version_test.dart` 断言它和 `pubspec.yaml`
   的 `version:` 一致 —— 忘了同步是测试变红，而不是界面上显示一个不存在的版本。
 
@@ -267,8 +255,8 @@ hooks:
 
 ### 用 `dart analyze` 而不是 `flutter analyze`
 
-`flutter analyze` 在中文路径下会崩（flutter_tools 计算 LSP 的 `Content-Length` 时按字符数而非字节数）。
-`dart analyze` 结果等价且不受影响。`flutter test` 也不受影响。
+`flutter analyze` 曾在中文路径下崩溃（flutter_tools 计算 LSP 的 `Content-Length` 时按字符数而非字节数）。
+目录已改 ASCII 名，理论上一半前提消失，但未回归验证过；`dart analyze` 结果等价且一直稳定，继续用它。
 
 ```bash
 D:/apps/flutter_windows_3.47.2-stable/flutter/bin/dart.bat analyze
@@ -290,6 +278,7 @@ lib/
     validate.dart            # 导入校验与归一化
     csv_report.dart          # 三份 CSV
   data/file_io.dart          # 导出落盘、自动备份与保留裁剪
+  data/updater.dart          # 检查更新：GitHub Releases 查询 / 版本比较 / APK 流式下载
   state/store.dart           # ChangeNotifier + InheritedNotifier
   ui/                        # home / person / bill / tx / contact / data / widgets
 ```
@@ -304,7 +293,7 @@ lib/
 D:/apps/flutter_windows_3.47.2-stable/flutter/bin/flutter.bat test
 ```
 
-125 个用例，跑在**真实 SQLite** 上（`sqflite_common_ffi`），覆盖：
+133 个用例，跑在**真实 SQLite** 上（`sqflite_common_ffi`），覆盖：
 库级约束、派生列重算（含跨账单挪流水、超付负数、SQL 与纯 Dart 两种实现互相对拍）、
 汇总查询、v1 业务禁令、全量覆盖导入（含导出→导入→再导出的逐字节往返）、
 金额解析格式化与万/亿压缩显示、快照校验器每条规则的负例、CSV 的 BOM 与转义，
@@ -352,10 +341,11 @@ D:/apps/flutter_windows_3.47.2-stable/flutter/bin/flutter.bat test
   payment_cents 50000 / balance_cents 150000`，界面 ¥1,500.00；
 - CSV 字节级确认：开头 `EF BB BF`（BOM）、行尾 `\r\n`（CRLF），Excel 可直接打开。
 
-**合并后 manifest 实测权限**（不是设计要求，是从构建产物里读出来的）：
-只有 `android.permission.INTERNET`（来自 Flutter 模板的 **debug** manifest，release 包没有）
-和 AndroidX 自动加的 `com.lishuncai.debtbook.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
-（自己 uid 内的广播保护，不是对外权限）。**没有任何存储权限、没有 MANAGE_EXTERNAL_STORAGE。**
+**清单声明的权限**（v1.0.1 起写进 **main** manifest，debug/release 都有）：
+`INTERNET` 与 `REQUEST_INSTALL_PACKAGES`，两条都只服务「检查更新 → 下载 APK → 调起系统安装器」
+这一条手动路径；另有 AndroidX 自动加的 `com.lishuncai.debtbook.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION`
+（自己 uid 内的广播保护，不是对外权限）。**仍然没有任何存储权限、没有 MANAGE_EXTERNAL_STORAGE**，
+备份导入导出一律走 SAF 与 share sheet。
 
 **还需要你在真机上确认**：share sheet 选微信时对方能不能正常收到文件（模拟器没装微信），
 以及点击手感和输入法习惯。
