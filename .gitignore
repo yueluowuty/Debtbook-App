@@ -53,3 +53,6 @@ app.*.map.json
 
 # 构建产物（161MB debug 包），别进版本库
 /debtbook-debug.apk
+
+# 视觉验收截图（从旧镜像目录抢救回来的，仅本机留档）
+/tool/devrun/shots/

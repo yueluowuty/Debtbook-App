@@ -1,12 +1,9 @@
 """本地调试回路：改 lib/ 下的 Dart 代码，自动热重载到安卓设备。
 
 为什么需要这个脚本，而不是直接敲 `flutter run`：
-
-1. 历史原因（中文路径需要 ASCII 镜像构建）已随目录改名 `debtbook-app` 消失，
-   构建默认就在本仓库做；`--mirror` 保留，仍可把构建目录指到别处。
-2. `flutter run` 的热重载靠按键盘 r，非交互环境下拿不到 TTY；这里走
-   `flutter run --machine` 协议，用 app.restart 触发同样的重载。
-   注意协议帧格式：每行是一个 JSON **数组**，发裸对象不会有任何回包。
+`flutter run` 的热重载靠按键盘 r，非交互环境下拿不到 TTY；这里走
+`flutter run --machine` 协议，用 app.restart 触发同样的重载。
+注意协议帧格式：每行是一个 JSON **数组**，发裸对象不会有任何回包。
 
 用法：
     D:/apps/flutter_windows_3.47.2-stable/flutter/bin/dart.bat --version  # 确认 SDK 在
@@ -28,7 +25,6 @@ import time
 
 FLUTTER_BAT = r"D:\apps\flutter_windows_3.47.2-stable\flutter\bin\flutter.bat"
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MIRROR = os.environ.get("DEBTBOOK_MIRROR") or REPO  # 默认就在本仓库构建
 WATCH_DIRS = ["lib", "pubspec.yaml"]
 POLL_SECONDS = 0.4
 
@@ -73,7 +69,7 @@ class FlutterMachine:
             encoding="utf-8",
             errors="replace",
             bufsize=1,
-            cwd=MIRROR,
+            cwd=REPO,
         )
         self.app_id = None
         self.started = threading.Event()
@@ -165,19 +161,16 @@ def port_open(serial):
 
 
 def main():
-    global MIRROR
     ap = argparse.ArgumentParser()
     ap.add_argument("--device", default="emulator-5554")
-    ap.add_argument("--mirror", default=MIRROR)
     ap.add_argument("--once", action="store_true", help="只启动，不驻留监听")
     ap.add_argument("--full", action="store_true", help="改动后用 hot restart 而非 hot reload")
     args = ap.parse_args()
 
-    MIRROR = args.mirror
     log = Log(os.path.join(REPO, "tool", "dev_run.log"))
 
-    if not os.path.isdir(os.path.join(MIRROR, "android")):
-        log("镜像目录不对：%s 下没有 android/" % MIRROR)
+    if not os.path.isdir(os.path.join(REPO, "android")):
+        log("仓库目录不对：%s 下没有 android/" % REPO)
         return 2
     if not port_open(args.device):
         log("设备 %s 没在跑。先启动模拟器：\n  %s" % (
@@ -185,7 +178,7 @@ def main():
             r"D:\Android\sdk\emulator\emulator.exe -avd debtbook -gpu host -no-snapshot-save"))
         return 2
 
-    log("仓库=%s  构建目录=%s  设备=%s" % (REPO, MIRROR, args.device))
+    log("仓库=%s  设备=%s" % (REPO, args.device))
     session = FlutterMachine(args.device, log)
     if not session.started.wait(timeout=600):
         log("10 分钟内没等到 app.started，看上面的构建输出")

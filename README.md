@@ -97,8 +97,8 @@ python D:/projects/debtbook-app/tool/dev_run.py
 改任意 `lib/**/*.dart` 存盘，约 0.5 秒后设备上就刷新（实测 `Reloaded 1 of 1714
 libraries in 430~573ms`）。几条不显然的前提：
 
-1. ~~镜像的 `lib` 是目录联接~~ —— 目录改名成 ASCII 后已不需要镜像，
-   脚本直接在本仓库构建（`--mirror` 参数保留，可指到别处）。
+1. 构建就在本仓库做。目录曾改名去中文（见上文「历史背景」），
+   旧镜像目录 `D:\projects\debtbook` 已彻底废弃，不要再引用。
 2. **热重载走的是 `flutter run --machine` 的 `app.restart`**。
    直接往 `flutter run` 的 stdin 灌字符 `r` 是没用的 —— 它检测到自己不在 TTY 上，
    根本不进交互模式。
@@ -109,6 +109,10 @@ libraries in 430~573ms`）。几条不显然的前提：
 
 回路只热重载 Dart 代码。改了 `pubspec.yaml`、原生代码或加了新文件，
 得 Ctrl+C 重新起（`--full` 参数改用 hot restart）。
+
+视觉验收用的小工具（与产品代码无关）：`tool/devrun/seed.sql` 往模拟器
+数据库灌一批「文字很多」的测试数据，`tool/devrun/shots/` 是历次验收截图
+（不进版本库）。
 
 ## 备份纪律（重要）
 
