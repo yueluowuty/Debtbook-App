@@ -1,0 +1,48 @@
+name: debtbook
+description: "本地欠款台账：按借款人记借出与还款，支持 JSON 快照备份恢复与 CSV 对账报表。"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.13.2
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # Material 组件的中文文案（确定/取消/日期选择器等）依赖它。
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+  # 存储：本地单文件 SQLite，账单余额一律由流水 SUM 重算。
+  sqflite: ^2.4.3
+  path_provider: ^2.1.6
+  # 离线文件：file_picker 负责导入时选文件，share_plus 负责导出时分享。
+  # 两者都走 SAF / share sheet，所以 AndroidManifest 不需要任何存储权限。
+  file_picker: ^12.2.0
+  share_plus: ^13.3.0
+  intl: ^0.20.3
+  path: ^1.9.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  # 让 `flutter test` 能在 Dart VM 上打开真实 SQLite，
+  # 从而在没有手机也没有模拟器的电脑上验完全部读写与重算逻辑。
+  sqflite_common_ffi: ^2.4.2+1
+  flutter_lints: ^6.0.0
+
+# package:sqlite3 只服务于 dev 依赖（让 flutter test 在开发机上开真实 SQLite），
+# 不参与 APK 构建。它的 build hook 默认从 GitHub Releases 下载预编译 dll，本机
+# 直连取不到；Git 自带的 msys-sqlite3-0.dll 又会在 sqlite3_initialize 里直接崩
+# （MSYS 运行时不服务非 MSYS 进程）。所以改为动态加载仓库根目录这份自包含的
+# 64 位 sqlite3.dll，不联网。
+hooks:
+  user_defines:
+    sqlite3:
+      source: system
+      name_windows: sqlite3
+
+flutter:
+  uses-material-design: true
