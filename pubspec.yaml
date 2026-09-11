@@ -2,7 +2,7 @@ name: debtbook
 description: "本地欠款台账：按借款人记借出与还款，支持 JSON 快照备份恢复与 CSV 对账报表。"
 publish_to: 'none'
 
-version: 1.0.0+1
+version: 1.0.1+2
 
 environment:
   sdk: ^3.13.2
@@ -24,6 +24,8 @@ dependencies:
   share_plus: ^13.3.0
   intl: ^0.20.3
   path: ^1.9.1
+  # 仅「检查更新」一条出网路径：查 GitHub Releases + 下载 APK。
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

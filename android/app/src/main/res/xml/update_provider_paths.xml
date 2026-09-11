@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- getApplicationDocumentsDirectory() 在 Android 上就是 external-files 根目录，
+         下载的 APK（docsDir/updates/）从这里取。 -->
+    <external-files-path name="docs" path="." />
+</paths>

@@ -1,8 +1,23 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- 唯一的出网用途是「检查更新」（GitHub Releases API + APK 直链下载），
+         且只在用户手动点击时发生。 -->
+    <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES"/>
     <application
         android:label="debtbook"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
+        <!-- 检查更新下载完 APK 后，用它把文件授权给系统安装器。
+             与 share_plus 自带的 provider 互不干扰（authority 不同）。 -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.updateProvider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/update_provider_paths"/>
+        </provider>
         <activity
             android:name=".MainActivity"
             android:exported="true"

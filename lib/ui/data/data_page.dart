@@ -2,11 +2,13 @@ import 'dart:io';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:share_plus/share_plus.dart';
 
 import '../../app_info.dart';
 import '../../data/file_io.dart';
+import '../../data/updater.dart';
 import '../../db/repo.dart';
 import '../../domain/money.dart';
 import '../../domain/validate.dart';
@@ -241,6 +243,94 @@ class _DataPageState extends State<DataPage> {
     });
   }
 
+  // ------------------------------------------------------------- 检查更新
+
+  static const _updateChannel =
+      MethodChannel('com.lishuncai.debtbook/update');
+
+  Future<void> _checkUpdate() => _guard(() async {
+        final info = await checkLatest(currentVersion: kAppVersion);
+        if (!mounted) return;
+        if (info == null) {
+          _toast('已是最新版本 v$kAppVersion');
+          return;
+        }
+        final go = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text('升级到 v${info.version}？'),
+            content: _UpdatePanel(info: info),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: const Text('取消')),
+              FilledButton(
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: const Text('下载并安装')),
+            ],
+          ),
+        );
+        if (go != true) return;
+        if (!Platform.isAndroid) {
+          _toast('仅 Android 支持应用内安装，请从 $kReleasePageUrl 下载');
+          return;
+        }
+        await _downloadAndInstall(info);
+      });
+
+  /// 下载期间顶一个进度对话框；完成后交给系统安装器。
+  Future<void> _downloadAndInstall(UpdateInfo info) async {
+    final progress = ValueNotifier<double>(0);
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text('下载 v${info.version}'),
+        content: ValueListenableBuilder<double>(
+          valueListenable: progress,
+          builder: (ctx, f, _) => Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LinearProgressIndicator(value: f),
+              const SizedBox(height: 8),
+              Text(
+                '${(f * 100).clamp(0, 100).round()}%'
+                '${info.apkBytes > 0 ? ' · 共 ${_humanBytes(info.apkBytes)}' : ''}',
+                style: Theme.of(ctx).textTheme.bodySmall,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    try {
+      final file = await downloadApk(info, _store!.docsDir,
+          onProgress: (f) => progress.value = f);
+      if (!mounted) return;
+      Navigator.of(context).pop(); // 收掉进度对话框
+      late final bool? ok;
+      try {
+        ok = await _updateChannel
+            .invokeMethod<bool>('installApk', {'path': file.path});
+      } on PlatformException catch (e) {
+        _toast('未能调起系统安装器：${e.message ?? e.code}');
+        return;
+      }
+      if (ok != true) {
+        _toast('未能调起系统安装器，请到 $kReleasePageUrl 手动安装');
+      } else {
+        _toast('已调起安装器：装完即为 v${info.version}，数据不会丢');
+      }
+    } catch (_) {
+      // 只可能是下载段抛的错；此时进度对话框还开着，先收掉再交给 _guard toast。
+      if (mounted) Navigator.of(context).pop();
+      rethrow;
+    } finally {
+      progress.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final store = StoreScope.of(context);
@@ -354,6 +444,18 @@ class _DataPageState extends State<DataPage> {
             ),
           ),
           _Section(
+            title: '版本更新',
+            accent: pal.info,
+            child: _ActionTile(
+              icon: Icons.system_update_alt_outlined,
+              tone: Tone.info,
+              title: '从 GitHub 检查更新',
+              subtitle: '对比 Releases 里的最新版本并下载安装包；只有点这里才会联网。',
+              busy: _busy,
+              onTap: _checkUpdate,
+            ),
+          ),
+          _Section(
             title: '危险操作',
             accent: pal.danger,
             child: _ActionTile(
@@ -377,7 +479,8 @@ class _DataPageState extends State<DataPage> {
                   const SizedBox(width: 9),
                   Expanded(
                     child: Text(
-                      '本 App 不联网，所有数据只在手机本机。'
+                      '本 App 不联网，所有数据只在手机本机'
+                      '（上面「检查更新」是唯一例外，且只在点击时才发请求）。'
                       '换机或卸载前，务必先把 JSON 快照存到别处。',
                       style: Theme.of(context).textTheme.bodySmall
                           ?.copyWith(color: pal.info.withValues(alpha: .95)),
@@ -413,6 +516,37 @@ class FileBackup {
   final int bytes;
   final DateTime modified;
   String get name => p.basename(file.path);
+}
+
+class _UpdatePanel extends StatelessWidget {
+  const _UpdatePanel({required this.info});
+  final UpdateInfo info;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('v$kAppVersion → v${info.version}',
+            style: theme.textTheme.titleMedium),
+        if (info.apkBytes > 0)
+          MetaLine(gap: 4, parts: ['安装包 ${_humanBytes(info.apkBytes)}']),
+        if (info.notes.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          ConstrainedBox(
+            constraints: const BoxConstraints(maxHeight: 200),
+            child: SingleChildScrollView(
+              child: Text(info.notes,
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: theme.colorScheme.outline)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }
 
 class _PreviewPanel extends StatelessWidget {
