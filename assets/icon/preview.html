@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>欠款台账 · App 图标方案预览</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #F5F7FA; color: #131A22; margin: 0; padding: 32px 40px; }
+  h1 { font-size: 22px; }
+  .concepts { display: flex; gap: 40px; flex-wrap: wrap; align-items: flex-start; }
+  .card { background: #fff; border: 1px solid #E4E9EF; border-radius: 14px; padding: 20px 24px; }
+  .card h2 { font-size: 16px; margin: 0 0 4px; }
+  .card p { font-size: 13px; color: #4F5B67; margin: 0 0 16px; }
+  .big { width: 256px; height: 256px; border-radius: 22%; box-shadow: 0 6px 18px rgba(19,26,34,.18); }
+  .row { display: flex; align-items: flex-end; gap: 18px; margin-top: 18px; }
+  .row img { display: block; }
+  .row .r { border-radius: 22%; }
+  .row .c { border-radius: 50%; }
+  .lbl { font-size: 11px; color: #6B7885; text-align: center; margin-top: 6px; }
+  .darkstrip { background: #131A22; border-radius: 12px; padding: 12px; margin-top: 18px; display: flex; gap: 18px; align-items: flex-end; }
+  .darkstrip .r { border-radius: 22%; }
+</style>
+</head>
+<body>
+<h1>欠款台账 · App 图标矢量方案（品牌色：应收绿 #0B7A52 / 应付琥珀 #B45309）</h1>
+<div class="concepts">
+
+  <div class="card">
+    <h2>方案 A · 摊开账本 + 金币</h2>
+    <p>叙事最完整：账本、流水、琥珀色欠款行、¥ 金币徽标。</p>
+    <img class="big" src="concept_a_ledger.svg" alt="A">
+    <div class="row">
+      <div><img class="r" src="concept_a_ledger.svg" width="96" height="96"><div class="lbl">96 圆角</div></div>
+      <div><img class="r" src="concept_a_ledger.svg" width="48" height="48"><div class="lbl">48</div></div>
+      <div><img class="c" src="concept_a_ledger.svg" width="48" height="48"><div class="lbl">48 圆形裁切</div></div>
+    </div>
+    <div class="darkstrip">
+      <img class="r" src="concept_a_ledger.svg" width="48" height="48">
+      <img class="r" src="concept_a_ledger.svg" width="28" height="28">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>方案 B · ¥ 金币 + 资金流转环</h2>
+    <p>语义最直接：白箭头=借出流走，琥珀箭头=回款流回，中心 ¥ 金币。</p>
+    <img class="big" src="concept_b_flow.svg" alt="B">
+    <div class="row">
+      <div><img class="r" src="concept_b_flow.svg" width="96" height="96"><div class="lbl">96 圆角</div></div>
+      <div><img class="r" src="concept_b_flow.svg" width="48" height="48"><div class="lbl">48</div></div>
+      <div><img class="c" src="concept_b_flow.svg" width="48" height="48"><div class="lbl">48 圆形裁切</div></div>
+    </div>
+    <div class="darkstrip">
+      <img class="r" src="concept_b_flow.svg" width="48" height="48">
+      <img class="r" src="concept_b_flow.svg" width="28" height="28">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>方案 C · ¥ 字标 + 收支柱</h2>
+    <p>最克制、小尺寸最稳：大号 ¥ + 底部递增收支柱。</p>
+    <img class="big" src="concept_c_yuan.svg" alt="C">
+    <div class="row">
+      <div><img class="r" src="concept_c_yuan.svg" width="96" height="96"><div class="lbl">96 圆角</div></div>
+      <div><img class="r" src="concept_c_yuan.svg" width="48" height="48"><div class="lbl">48</div></div>
+      <div><img class="c" src="concept_c_yuan.svg" width="48" height="48"><div class="lbl">48 圆形裁切</div></div>
+    </div>
+    <div class="darkstrip">
+      <img class="r" src="concept_c_yuan.svg" width="48" height="48">
+      <img class="r" src="concept_c_yuan.svg" width="28" height="28">
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>方案 D · 台账流水卡 + 金币</h2>
+    <p>产品感最强：一张欠款流水卡，绿=结清、琥珀=未还清。</p>
+    <img class="big" src="concept_d_card.svg" alt="D">
+    <div class="row">
+      <div><img class="r" src="concept_d_card.svg" width="96" height="96"><div class="lbl">96 圆角</div></div>
+      <div><img class="r" src="concept_d_card.svg" width="48" height="48"><div class="lbl">48</div></div>
+      <div><img class="c" src="concept_d_card.svg" width="48" height="48"><div class="lbl">48 圆形裁切</div></div>
+    </div>
+    <div class="darkstrip">
+      <img class="r" src="concept_d_card.svg" width="48" height="48">
+      <img class="r" src="concept_d_card.svg" width="28" height="28">
+    </div>
+  </div>
+
+</div>
+<p style="margin-top:28px;color:#6B7885;font-size:13px">
+  源文件即上三个 SVG（512×512 viewBox，全画幅背景，主体均在自适应图标 66% 安全区内）。<br>
+  选定后我再把它接入 flutter_launcher_icons，生成 Android mipmap + 自适应图标（含单色层）。
+</p>
+</body>
+</html>

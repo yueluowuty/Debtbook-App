@@ -2,7 +2,7 @@ name: debtbook
 description: "本地欠款台账：按借款人记借出与还款，支持 JSON 快照备份恢复与 CSV 对账报表。"
 publish_to: 'none'
 
-version: 1.0.1+2
+version: 1.0.2+3
 
 environment:
   sdk: ^3.13.2
@@ -34,6 +34,7 @@ dev_dependencies:
   # 从而在没有手机也没有模拟器的电脑上验完全部读写与重算逻辑。
   sqflite_common_ffi: ^2.4.2+1
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: 0.14.4
 
 # package:sqlite3 只服务于 dev 依赖（让 flutter test 在开发机上开真实 SQLite），
 # 不参与 APK 构建。它的 build hook 默认从 GitHub Releases 下载预编译 dll，本机
@@ -48,3 +49,13 @@ hooks:
 
 flutter:
   uses-material-design: true
+
+# 图标源文件是 assets/icon/*.svg（设计稿），PNG 由 headless Edge 光栅化生成，
+# 再交给本工具产出 Android mipmap + 自适应图标（含单色层）。
+flutter_launcher_icons:
+  android: true
+  ios: false
+  image_path: "assets/icon/debtbook_full.png"
+  adaptive_icon_background: "assets/icon/debtbook_bg.png"
+  adaptive_icon_foreground: "assets/icon/debtbook_fg.png"
+  adaptive_icon_monochrome: "assets/icon/debtbook_mono.png"

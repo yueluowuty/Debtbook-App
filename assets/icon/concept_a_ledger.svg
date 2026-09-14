@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bgA" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0A5F44"/>
+      <stop offset="1" stop-color="#12946A"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" fill="url(#bgA)"/>
+  <!-- 摊开的账本 -->
+  <path d="M256 168 C224 146 156 144 106 160 L106 348 C156 332 224 334 256 356 Z" fill="#FFFFFF"/>
+  <path d="M256 168 C288 146 356 144 406 160 L406 348 C356 332 288 334 256 356 Z" fill="#E4F4EA"/>
+  <path d="M256 168 L256 356" stroke="#0B7A52" stroke-opacity="0.30" stroke-width="6"/>
+  <!-- 左页流水线 -->
+  <g stroke="#0B7A52" stroke-opacity="0.35" stroke-width="12" stroke-linecap="round" fill="none">
+    <path d="M132 204 C166 192 206 190 234 198"/>
+    <path d="M132 246 C166 234 206 232 234 240"/>
+    <path d="M132 288 C166 276 206 274 234 282"/>
+  </g>
+  <!-- 右页：两笔普通流水 + 一笔琥珀色欠款 -->
+  <g stroke="#0B7A52" stroke-opacity="0.35" stroke-width="12" stroke-linecap="round" fill="none">
+    <path d="M278 198 C306 190 346 192 380 204"/>
+    <path d="M278 240 C306 232 346 234 380 246"/>
+  </g>
+  <path d="M278 282 C300 275 322 276 340 282" stroke="#B45309" stroke-width="12" stroke-linecap="round" fill="none"/>
+  <!-- 金币徽标 -->
+  <circle cx="366" cy="350" r="64" fill="#FFB74D" stroke="#FFFFFF" stroke-width="10"/>
+  <g stroke="#6A3005" stroke-width="9" stroke-linecap="round" fill="none">
+    <path d="M342 322 L366 348"/>
+    <path d="M390 322 L366 348"/>
+    <path d="M366 348 L366 382"/>
+    <path d="M346 358 L386 358"/>
+    <path d="M344 370 L388 370"/>
+  </g>
+</svg>
