@@ -2,7 +2,7 @@ name: debtbook
 description: "本地欠款台账：按借款人记借出与还款，支持 JSON 快照备份恢复与 CSV 对账报表。"
 publish_to: 'none'
 
-version: 1.0.2+3
+version: 1.0.3+4
 
 environment:
   sdk: ^3.13.2

@@ -35,7 +35,11 @@ class MainActivity : FlutterActivity() {
                     )
                     result.success(true)
                 } catch (e: Exception) {
-                    result.error("INSTALL_LAUNCH_FAILED", e.message, null)
+                    result.error(
+                        "INSTALL_LAUNCH_FAILED",
+                        "${e.javaClass.simpleName}: ${e.message}",
+                        null
+                    )
                 }
             } else {
                 result.notImplemented()

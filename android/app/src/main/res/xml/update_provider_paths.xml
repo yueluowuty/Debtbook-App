@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
-    <!-- getApplicationDocumentsDirectory() 在 Android 上就是 external-files 根目录，
-         下载的 APK（docsDir/updates/）从这里取。 -->
+    <!-- 下载的 APK 落在 getExternalStorageDirectory()（即 external-files 根）
+         下的 updates/，与此处映射对齐。注意 path_provider 的 docsDir 是内部
+         app_flutter 目录，FileProvider 覆盖不到，别往那里放要分享的 APK。 -->
     <external-files-path name="docs" path="." />
 </paths>

@@ -1,6 +1,11 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:debtbook/data/updater.dart';
 import 'package:debtbook/db/repo.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 
 Map<String, Object?> _release({
   required String tag,
@@ -74,6 +79,65 @@ void main() {
       );
       expect(info!.notes.length, 301); // 300 字符 + 省略号
       expect(info.notes, endsWith('…'));
+    });
+  });
+
+  group('downloadApk 断点续传', () {
+    final bytes = List.generate(100, (i) => i);
+    final info = UpdateInfo(
+      version: '9.9.9',
+      apkUrl: 'https://example.com/a.apk',
+      apkBytes: 100,
+      notes: '',
+    );
+
+    test('中途断流后重试，带 Range 从已落盘字节续传', () async {
+      final ranges = <String?>[];
+      var calls = 0;
+      final client = MockClient.streaming((req, _) async {
+        calls++;
+        ranges.add(req.headers['range']);
+        if (calls == 1) {
+          final ctl = StreamController<List<int>>();
+          // ignore: unawaited_futures
+          Future.microtask(() {
+            ctl.add(bytes.sublist(0, 40));
+            ctl.addError(const SocketException('切后台被掐断'));
+            ctl.close();
+          });
+          return http.StreamedResponse(ctl.stream, 200,
+              contentLength: 100, request: req);
+        }
+        final start = int.parse(RegExp(r'bytes=(\d+)-').firstMatch(ranges.last!)!.group(1)!);
+        return http.StreamedResponse(
+          Stream.value(bytes.sublist(start)),
+          206,
+          contentLength: bytes.length - start,
+          request: req,
+        );
+      });
+      final dir = await Directory.systemTemp.createTemp('debtbook_dl');
+      addTearDown(() => dir.delete(recursive: true));
+
+      final file = await downloadApk(info,
+          onProgress: (_) {}, client: client, baseDir: dir);
+
+      expect(await file.length(), 100);
+      expect(await file.readAsBytes(), bytes);
+      expect(ranges, [null, 'bytes=40-']);
+      // .part 已改名转正，不残留
+      expect(File('${file.path}.part').existsSync(), isFalse);
+    });
+
+    test('服务器不支持 Range（返回 200）时从头下载仍能完成', () async {
+      final client = MockClient.streaming((req, _) async => http.StreamedResponse(
+            Stream.value(bytes), 200, contentLength: 100, request: req));
+      final dir = await Directory.systemTemp.createTemp('debtbook_dl');
+      addTearDown(() => dir.delete(recursive: true));
+
+      final file = await downloadApk(info,
+          onProgress: (_) {}, client: client, baseDir: dir);
+      expect(await file.readAsBytes(), bytes);
     });
   });
 }

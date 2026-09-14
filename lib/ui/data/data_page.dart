@@ -305,7 +305,7 @@ class _DataPageState extends State<DataPage> {
       ),
     );
     try {
-      final file = await downloadApk(info, _store!.docsDir,
+      final file = await downloadApk(info,
           onProgress: (f) => progress.value = f);
       if (!mounted) return;
       Navigator.of(context).pop(); // 收掉进度对话框
