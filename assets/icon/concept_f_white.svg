@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <!-- 白底重设计：卡片用浅绿填充 + 品牌绿描边，靠线条而非底色对比 -->
+  <rect width="512" height="512" fill="#FFFFFF"/>
+  <rect x="112" y="118" width="288" height="276" rx="36" fill="#EAF6EF" stroke="#0B7A52" stroke-width="8"/>
+  <path d="M116 154 A32 32 0 0 1 148 122 H364 A32 32 0 0 1 396 154 V186 H116 Z" fill="#0A5F44"/>
+  <rect x="144" y="144" width="96" height="16" rx="8" fill="#FFFFFF" fill-opacity="0.95"/>
+  <circle cx="368" cy="152" r="18" fill="#F59E0B"/>
+  <g>
+    <circle cx="158" cy="232" r="13" fill="#0E9F6E"/>
+    <rect x="186" y="224" width="108" height="16" rx="8" fill="#B8C7D6"/>
+    <rect x="306" y="224" width="58" height="16" rx="8" fill="#0B7A52"/>
+    <circle cx="158" cy="294" r="13" fill="#0E9F6E"/>
+    <rect x="186" y="286" width="108" height="16" rx="8" fill="#B8C7D6"/>
+    <rect x="306" y="286" width="58" height="16" rx="8" fill="#B45309"/>
+    <circle cx="158" cy="356" r="13" fill="#0E9F6E"/>
+    <rect x="186" y="348" width="108" height="16" rx="8" fill="#B8C7D6"/>
+  </g>
+  <!-- 金币徽标：白底上改用深绿描边，白圈会隐形 -->
+  <circle cx="376" cy="372" r="56" fill="#FFB74D" stroke="#0A5F44" stroke-width="6"/>
+  <g stroke="#6A3005" stroke-width="8" stroke-linecap="round" fill="none">
+    <path d="M356 348 L376 370"/>
+    <path d="M396 348 L376 370"/>
+    <path d="M376 370 L376 398"/>
+    <path d="M358 378 L394 378"/>
+    <path d="M356 388 L396 388"/>
+  </g>
+</svg>
