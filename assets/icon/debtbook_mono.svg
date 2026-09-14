@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- Android 13+ 主题图标单色层：仅白色轮廓/形状，随系统取色 -->
-  <g transform="translate(256 256) translate(-274.5 -275.5)">
+  <!-- Android 13+ 主题图标单色层：仅白色轮廓/形状，随系统取色；卡片居中，金币出血 -->
+  <g>
     <rect x="118" y="124" width="276" height="264" rx="32" fill="none" stroke="#FFFFFF" stroke-width="12"/>
     <g fill="#FFFFFF">
       <circle cx="158" cy="232" r="13"/>

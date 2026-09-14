@@ -1,6 +1,8 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
-  <!-- 自适应图标前景层（方案 E）：fli 会再套 16% inset，这里只做居中平移 -->
-  <g transform="translate(256 256) translate(-274.5 -275.5)">
+  <!-- 自适应图标前景层（方案 E）：卡片本身即画布中心，金币向右下自然出血；
+       切勿再按"卡片+金币"联合包围盒居中，那会把主角卡片推向左上。
+       fli 会再套 16% inset。 -->
+  <g>
     <rect x="120" y="130" width="288" height="276" rx="36" fill="#07422C" fill-opacity="0.10"/>
     <rect x="112" y="118" width="288" height="276" rx="36" fill="#FFFFFF"/>
     <path d="M112 154 A36 36 0 0 1 148 118 H364 A36 36 0 0 1 400 154 V186 H112 Z" fill="#0B7A52"/>
