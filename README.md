@@ -221,8 +221,8 @@ libraries in 430~573ms`）。几条不显然的前提：
 ## 开发环境
 
 这个项目绑定 **Flutter 3.47.2 / Dart 3.13.2**，装在
-`D:\apps\flutter_windows_3.47.2-stable\flutter`，**与全局 PATH 上的 3.22.2 并排存在**。
-所以命令要写绝对路径，直接敲 `flutter` 会走成旧版本：
+`D:\apps\flutter_windows_3.47.2-stable\flutter`，全局 PATH 也已指向它
+（2026-09-15 清掉了旧的 3.22.2）。下文仍写绝对路径，是为了不受终端 PATH 影响：
 
 ```bash
 D:/apps/flutter_windows_3.47.2-stable/flutter/bin/flutter.bat test
