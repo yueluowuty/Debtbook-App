@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>欠款台账 · 自适应图标真机效果模拟</title>
+<style>
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #F5F7FA; color: #131A22; margin: 0; padding: 32px 40px; }
+  h1 { font-size: 22px; }
+  h2 { font-size: 15px; color: #4F5B67; margin: 28px 0 12px; }
+  .row { display: flex; gap: 28px; flex-wrap: wrap; align-items: flex-start; }
+  figure { margin: 0; text-align: center; }
+  figcaption { font-size: 12px; color: #6B7885; margin-top: 8px; }
+  /* 模拟 108dp 自适应画布：背景全出血，前景 inset 16%（即 68% 居中） */
+  .adaptive { position: relative; overflow: hidden; background: #fff; }
+  .adaptive .bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+  .adaptive .fg { position: absolute; left: 16%; top: 16%; width: 68%; height: 68%; }
+  /* 旧版偏移量：联合包围盒居中导致卡片左上偏 18.5/19.5 px（512 空间），
+     经 inset 后在画布上为 18.5/512*68% ≈ 2.46% */
+  .adaptive .fg.old { left: calc(16% - 2.46%); top: calc(16% - 2.59%); }
+  .circle { border-radius: 50%; }
+  .squircle { border-radius: 22%; }
+  .none { border-radius: 0; }
+  /* 桌面模拟 */
+  .shelf { display: flex; gap: 26px; padding: 26px 30px; border-radius: 16px; align-items: flex-start; }
+  .shelf.light { background: linear-gradient(160deg, #cfe3ff, #f3e8ff); }
+  .shelf.dark { background: linear-gradient(160deg, #16222c, #0d1519); }
+  .app { width: 64px; text-align: center; }
+  .app .adaptive { width: 58px; height: 58px; margin: 0 auto; box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+  .app span { display: block; font-size: 11px; margin-top: 6px; }
+  .shelf.light .app span { color: #1c2733; }
+  .shelf.dark .app span { color: #e8eef4; }
+</style>
+</head>
+<body>
+<h1>自适应图标真机效果模拟（背景层 + 前景 inset 16%，与 Android 合成规则一致）</h1>
+
+<h2>修复后（卡片居中，金币右下出血）</h2>
+<div class="row">
+  <figure><div class="adaptive circle" style="width:180px;height:180px">
+    <img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><figcaption>圆形掩膜（Pixel/多数启动器）</figcaption></figure>
+  <figure><div class="adaptive squircle" style="width:180px;height:180px">
+    <img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><figcaption>圆角方形掩膜</figcaption></figure>
+  <figure><div class="adaptive none" style="width:180px;height:180px">
+    <img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><figcaption>无掩膜（完整 108dp 画布）</figcaption></figure>
+</div>
+
+<h2>修复前 vs 修复后（圆形掩膜，并排对比）</h2>
+<div class="row">
+  <figure><div class="adaptive circle" style="width:180px;height:180px">
+    <img class="bg" src="debtbook_bg.png"><img class="fg old" src="debtbook_fg.png"></div><figcaption>修复前：整体偏左上（你看到的问题）</figcaption></figure>
+  <figure><div class="adaptive circle" style="width:180px;height:180px">
+    <img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><figcaption>修复后：卡片正中</figcaption></figure>
+</div>
+
+<h2>桌面模拟（64px 实际观感）</h2>
+<div class="shelf light">
+  <div class="app"><div class="adaptive circle"><img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><span>欠款台账</span></div>
+  <div class="app"><div class="adaptive squircle"><img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><span>欠款台账</span></div>
+</div>
+<div class="shelf dark" style="margin-top:14px">
+  <div class="app"><div class="adaptive circle"><img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><span>欠款台账</span></div>
+  <div class="app"><div class="adaptive squircle"><img class="bg" src="debtbook_bg.png"><img class="fg" src="debtbook_fg.png"></div><span>欠款台账</span></div>
+</div>
+
+<h2>传统（非自适应）mipmap 图标 —— 部分启动器/最近任务里用这张</h2>
+<div class="row">
+  <figure><img class="adaptive squircle" src="debtbook_full.png" style="width:180px;height:180px;border:none"><figcaption>圆角掩膜预览</figcaption></figure>
+  <figure><img class="adaptive circle" src="debtbook_full.png" style="width:180px;height:180px;border:none"><figcaption>圆形掩膜预览</figcaption></figure>
+</div>
+
+<p style="margin-top:24px;color:#6B7885;font-size:13px">
+  说明：这是按 Android 合成规则（108dp 画布、前景缩到 68% 居中、掩膜露出中心约 66dp）做的 CSS 模拟，
+  与各家启动器的精确形状可能有 ±2px 出入，但居中关系、出血量是真实的。
+</p>
+</body>
+</html>
