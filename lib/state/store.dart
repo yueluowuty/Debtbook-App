@@ -24,7 +24,7 @@ class LedgerStore extends ChangeNotifier {
 
   final LedgerRepo repo;
 
-  /// 应用私有目录，导出快照/CSV 与自动备份都落在这里。
+  /// 应用私有目录，导出快照与自动备份都落在这里。
   final String docsDir;
 
   LedgerTotals totals = const LedgerTotals(receivableCents: 0, payableCents: 0);

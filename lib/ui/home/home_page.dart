@@ -146,7 +146,6 @@ class _HeaderBanner extends StatelessWidget {
     final pal = LedgerPalette.of(context);
     final theme = Theme.of(context);
     final t = store.totals;
-    final caption = t.netCents > 0 ? '可收回' : t.netCents < 0 ? '待偿还' : '已结清';
 
     return Container(
       width: double.infinity,
@@ -192,18 +191,11 @@ class _HeaderBanner extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 10),
-              Row(
-                children: [
-                  const Expanded(
-                    child: Text('净差',
-                        style: TextStyle(
-                            color: Colors.white70,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600)),
-                  ),
-                  _GhostChip(text: caption),
-                ],
-              ),
+              const Text('净差',
+                  style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600)),
               const SizedBox(height: 2),
               FittedBox(
                 fit: BoxFit.scaleDown,
@@ -243,28 +235,6 @@ class _HeaderBanner extends StatelessWidget {
             ],
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _GhostChip extends StatelessWidget {
-  const _GhostChip({required this.text});
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
-      decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: .18),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white.withValues(alpha: .28)),
-      ),
-      child: Text(
-        text,
-        style: const TextStyle(
-            color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
       ),
     );
   }
@@ -459,7 +429,7 @@ class _FooterNote extends StatelessWidget {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                store.archivedCount > 0
+                store.archivedCount > 0 && !store.includeArchived
                     ? '已归档 ${store.archivedCount} 人（点上方归档按钮可见）'
                     : '数据只存在本机，建议每次记账后导出一份备份',
                 maxLines: 2,
@@ -519,97 +489,134 @@ class _ContactList extends StatelessWidget {
       );
     }
 
-    return ListView.separated(
+    // 归档的人不再混在列表里、也不再在行内挂「已归档」徽标（那个徽标要吃掉
+    // 一小截宽度）：开关打开时他们单独成一组，排在正常借款人**上方**；
+    // 关掉则整组不见。搜索与方向筛选对两组同时生效，因为查的是同一次查询。
+    final archived = list.where((c) => c.archived).toList();
+    final active = list.where((c) => !c.archived).toList();
+
+    return ListView(
       padding: const EdgeInsets.fromLTRB(12, 6, 12, 12),
-      itemCount: list.length,
-      separatorBuilder: (_, _) => const SizedBox(height: 8),
-      itemBuilder: (context, i) {
-        final c = list[i];
-        final tone = c.netCents == 0
-            ? Tone.neutral
-            : c.netCents > 0
-                ? Tone.receivable
-                : Tone.payable;
-        // 刻意不用 ListTile：它给 trailing 的 maxHeight 恒为 56 逻辑像素
-        // （maxIconHeightConstraint），既不随行高也不随字号变化，
-        // 而这里的 trailing 是两行文字 —— 1.6 倍字号实测溢出 6px。
-        // 自己拼 Row 之后，行高由最高的孩子决定，字号再大也只是行变高。
-        return TintedCard(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          onTap: () => onOpen(c),
-          child: Row(
-            children: [
-              PersonAvatar(name: c.name, muted: c.archived),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            c.name,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.titleMedium,
-                          ),
-                        ),
-                        if (c.archived) ...[
-                          const SizedBox(width: 6),
-                          const ToneBadge(text: '已归档'),
-                        ],
-                      ],
-                    ),
-                    MetaLine(
-                      gap: 2,
-                      parts: [
-                        c.phone,
-                        // 账单数/流水数不再挤在首页这一行：左列只有半张卡的宽度，
-                        // 三个数字必然折行，折在「5 笔流水」中间比少一个数字更难读。
-                        // 这两个数在人员页页首就有。
-                        if ((c.phone ?? '').isEmpty) '${c.txCount} 笔流水',
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              // 这里必须是 Expanded 而不是 Flexible：
-              // 两者默认 flex 都是 1，可用空间一律 50/50 分，但 Flexible 只给上限、
-              // 不要求填满，于是内容宽度 < 半个槽位，crossAxisAlignment.end 对齐的是
-              // 槽位起点而不是卡片右边缘 —— 金额胶囊就没贴右，且每行的右空隙还不一样。
-              // Expanded 强制填满槽位，右边缘才真的等于卡片内容右边缘。
-              // 也不能用非 flex 孩子：Row 给它的无限宽主约束会让里面的 FittedBox 永不缩放。
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    AmountTag(
-                      text: _amountLabel(c),
-                      tone: tone,
-                      icon: c.netCents < 0
-                          ? Icons.south_east
-                          : c.netCents > 0
-                              ? Icons.north_east
-                              : Icons.check,
-                    ),
-                    if (c.lastActivity != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 4),
-                        child: Text(
-                          '最近 ${c.lastActivity!.substring(5)}',
-                          style: theme.textTheme.labelSmall
-                              ?.copyWith(color: pal.meta),
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-            ],
+      children: [
+        if (archived.isNotEmpty) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(4, 0, 4, 8),
+            child: Row(
+              children: [
+                Icon(Icons.inventory_2_outlined, size: 14, color: pal.meta),
+                const SizedBox(width: 6),
+                Text('已归档 ${archived.length} 人',
+                    style: theme.textTheme.labelMedium
+                        ?.copyWith(color: pal.meta)),
+              ],
+            ),
           ),
-        );
-      },
+          for (final c in archived) ...[
+            _ContactTile(contact: c, onOpen: onOpen),
+            const SizedBox(height: 8),
+          ],
+          // 组间空档比行内间距大一点，扫一眼就知道是两拨人。
+          if (active.isNotEmpty) const SizedBox(height: 10),
+        ],
+        for (final c in active) ...[
+          _ContactTile(contact: c, onOpen: onOpen),
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _ContactTile extends StatelessWidget {
+  const _ContactTile({required this.contact, required this.onOpen});
+  final Contact contact;
+  final ValueChanged<Contact> onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final c = contact;
+    final pal = LedgerPalette.of(context);
+    final theme = Theme.of(context);
+    final tone = c.netCents == 0
+        ? Tone.neutral
+        : c.netCents > 0
+            ? Tone.receivable
+            : Tone.payable;
+    // 刻意不用 ListTile：它给 trailing 的 maxHeight 恒为 56 逻辑像素
+    // （maxIconHeightConstraint），既不随行高也不随字号变化，
+    // 而这里的 trailing 是两行文字 —— 1.6 倍字号实测溢出 6px。
+    // 自己拼 Row 之后，行高由最高的孩子决定，字号再大也只是行变高。
+    return TintedCard(
+      // 归档的人整块淡底：光靠上面那行小标分不出「这是另一拨」，
+      // 底色一压，扫到这一段时边界就自己出来了。
+      tone: c.archived ? Tone.neutral : null,
+      tint: c.archived ? archivedTint : null,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+      onTap: () => onOpen(c),
+      child: Row(
+        children: [
+          // 字号固定、最多 5 个字：整列的名字于是同一个字号。
+          PersonAvatar(name: c.name, muted: c.archived, maxChars: 5),
+          const SizedBox(width: 12),
+          // 人名已由上面的胶囊承载，这里只剩手机号。
+          // 槽位必须仍是 Expanded：删了右侧金额就独占剩余宽度，半槽变整槽，
+          // 金额的缩放比例会随行宽漂。
+          // 号码本身只能整块缩放、不能折行 —— 1.6 倍字号下 11 位号码
+          // 一度在半个槽位里折成「1381234567 / 8」两截。
+          Expanded(
+            child: c.phone == null
+                ? const SizedBox.shrink()
+                : FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      c.phone!,
+                      maxLines: 1,
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+          ),
+          const SizedBox(width: 10),
+          // 这里必须是 Expanded 而不是 Flexible：
+          // 两者默认 flex 都是 1，可用空间一律 50/50 分，但 Flexible 只给上限、
+          // 不要求填满，于是内容宽度 < 半个槽位，crossAxisAlignment.end 对齐的是
+          // 槽位起点而不是卡片右边缘 —— 金额胶囊就没贴右，且每行的右空隙还不一样。
+          // Expanded 强制填满槽位，右边缘才真的等于卡片内容右边缘。
+          // 也不能用非 flex 孩子：Row 给它的无限宽主约束会让里面的 FittedBox 永不缩放。
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                AmountTag(
+                  text: _amountLabel(c),
+                  tone: tone,
+                  icon: c.netCents < 0
+                      ? Icons.south_east
+                      : c.netCents > 0
+                          ? Icons.north_east
+                          : Icons.check,
+                ),
+                if (c.lastActivity != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    // 日期改成 yyyy.MM.dd 后字形从 9 个涨到 15 个，而这半个
+                    // 槽位在 1.6 倍字号下刚好放不下：只能缩，不能截。
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerRight,
+                      child: Text(
+                        '最近 ${formatDateDot(c.lastActivity!)}',
+                        maxLines: 1,
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: pal.meta),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 

@@ -101,6 +101,30 @@ class _PersonPageState extends State<PersonPage> {
           );
   }
 
+  /// 同一个人的账单之间不能撞色：只按标题哈希的话，「房租」和「押金」会落在同一格
+  /// 青，反而分不出来。各自从自己的哈希位起步，撞了就往后挪一格 ——
+  /// 账单数不超过 `billBarHues.length` 时必然互不相同。
+  /// 第一笔例外：恒用主题深绿。它永远是最上面那张，颜色不变反而成了一个锚，
+  /// 身份色只用来分「第二张往后是哪一单」。
+  List<Color> get _barColors {
+    final primary = Theme.of(context).colorScheme.primary;
+    final used = <int>{};
+    final out = <Color>[];
+    for (var i = 0; i < _bills.length; i++) {
+      if (i == 0) {
+        out.add(primary);
+        continue;
+      }
+      var slot = billBarHueSeed(_bills[i].title);
+      while (used.contains(slot)) {
+        slot = (slot + 1) % billBarHues.length;
+      }
+      used.add(slot);
+      out.add(billBarHues[slot]);
+    }
+    return out;
+  }
+
   @override
   Widget build(BuildContext context) {
     final pal = LedgerPalette.of(context);
@@ -128,23 +152,26 @@ class _PersonPageState extends State<PersonPage> {
       appBar: AppBar(
         title: Row(
           children: [
-            PersonAvatar(name: contact.name, size: 34, muted: contact.archived),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(contact.name,
-                      maxLines: 1, overflow: TextOverflow.ellipsis),
-                  if (contact.phone != null)
-                    Text(
-                      contact.phone!,
-                      style: Theme.of(context).textTheme.labelSmall,
-                    ),
-                ],
-              ),
+            PersonAvatar(
+              name: contact.name,
+              size: 34,
+              muted: contact.archived,
+              textStyle: Theme.of(context).textTheme.titleLarge,
+              // 列表那边是「最多 5 个字 + 省略号」，这里不行：全名只有这一处落点。
+              maxWidth: 220,
             ),
+            // 手机号不校验格式，长串照样可能顶宽，只能给它在剩余宽度里省略。
+            if (contact.phone != null) ...[
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  contact.phone!,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelSmall,
+                ),
+              ),
+            ],
           ],
         ),
         actions: [
@@ -257,17 +284,19 @@ class _PersonPageState extends State<PersonPage> {
                 ),
               )
             else
-              for (final b in _bills)
+              for (var i = 0; i < _bills.length; i++)
                 Padding(
                   padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
                   child: _BillCard(
-                    bill: b,
+                    bill: _bills[i],
+                    barColor: _barColors[i],
                     onOpen: () async {
                       await Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => BillPage(billId: b.id)));
+                          builder: (_) => BillPage(billId: _bills[i].id)));
                       if (context.mounted) await _load();
                     },
-                    onQuickAdd: () => _run(() => showTxSheet(context, bill: b)),
+                    onQuickAdd: () =>
+                        _run(() => showTxSheet(context, bill: _bills[i])),
                   ),
                 ),
             const SizedBox(height: 10),
@@ -434,8 +463,14 @@ class _SubtotalTile extends StatelessWidget {
 
 class _BillCard extends StatelessWidget {
   const _BillCard(
-      {required this.bill, required this.onOpen, required this.onQuickAdd});
+      {required this.bill,
+      required this.barColor,
+      required this.onOpen,
+      required this.onQuickAdd});
   final Bill bill;
+
+  /// 由页面统一分配：同一个人的账单之间不撞色。
+  final Color barColor;
   final VoidCallback onOpen;
   final VoidCallback onQuickAdd;
 
@@ -453,8 +488,11 @@ class _BillCard extends StatelessWidget {
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // 左侧色条：不读文字也能一眼分清这单是收还是付。
-            Container(width: 4, color: pal.ink(tone)),
+            // 左侧色条按账单取色（同一账单标题永远同一格，同一个人的账单互不相同）：
+            // 之前它跟着「应收绿 / 应付橙」走，三张应收账单叠在一起就是三条
+            // 一模一样的绿，分不出这是哪一单。方向信息没丢 —— 「剩余未收/未付」
+            // 的金额和大号余额都还是语义色。
+            Container(width: 4, color: barColor),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.all(12),
@@ -471,22 +509,24 @@ class _BillCard extends StatelessWidget {
                             style: theme.textTheme.titleMedium,
                           ),
                         ),
-                        ToneBadge(
-                          text: directionShort(bill.direction),
-                          tone: pal.toneOfDirection(bill.direction),
-                        ),
-                        IconButton(
-                          tooltip: '记一笔',
-                          iconSize: 20,
-                          color: pal.meta,
-                          visualDensity: VisualDensity.compact,
-                          // 默认 48x48 的点击框会把标题行顶得比文字高出一截，
-                          // 标题与「剩余未收」之间就裂开一道空档。
-                          constraints:
-                              const BoxConstraints.tightFor(width: 34, height: 34),
-                          padding: EdgeInsets.zero,
+                        const SizedBox(width: 6),
+                        // 原来这里挂着一个「应收/应付」胶囊：方向其实一处没少，
+                        // 左边 4px 色条、「剩余未收/未付」、下面的「借出 ¥…」都是，
+                        // 三个地方说同一件事就是噪音。
+                        FilledButton.tonal(
                           onPressed: onQuickAdd,
-                          icon: const Icon(Icons.add_circle_outline),
+                          style: FilledButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            // 主题把 filledButton 钉在 48 高 + labelLarge：
+                            // 标题行会被顶得比文字高出一截，和当初把 IconButton
+                            // 压到 34 是同一个理由。
+                            minimumSize: const Size(0, 34),
+                            padding: const EdgeInsets.symmetric(horizontal: 12),
+                            textStyle: theme.textTheme.labelMedium,
+                            shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(9)),
+                          ),
+                          child: const Text('记一笔'),
                         ),
                       ],
                     ),
@@ -514,7 +554,6 @@ class _BillCard extends StatelessWidget {
                       parts: [
                         '${isIn ? '借出' : '借入'} ¥${formatCents(bill.principalCents)}',
                         '已还 ¥${formatCents(bill.paymentCents)}',
-                        '${bill.txCount} 笔',
                         _dateRange(bill),
                       ],
                     ),
@@ -536,8 +575,8 @@ class _BillCard extends StatelessWidget {
 
   String? _dateRange(Bill b) {
     if (b.firstDate == null) return null;
-    final first = b.firstDate!.substring(5);
-    final last = b.lastDate!.substring(5);
+    final first = formatDateDot(b.firstDate!);
+    final last = formatDateDot(b.lastDate!);
     return first == last ? first : '$first ~ $last';
   }
 }
@@ -551,7 +590,6 @@ class _TxTimeline extends StatelessWidget {
   Widget build(BuildContext context) {
     final pal = LedgerPalette.of(context);
     final titles = <int, String>{for (final b in bills) b.id: b.title};
-    final directions = <int, String>{for (final b in bills) b.id: b.direction};
 
     return TintedCard(
       padding: const EdgeInsets.symmetric(vertical: 2),
@@ -560,17 +598,20 @@ class _TxTimeline extends StatelessWidget {
           for (var i = 0; i < txs.length; i++) ...[
             if (i > 0)
               Padding(
-                padding: const EdgeInsets.only(left: 50),
+                // 12 = TxRow 自己的横向内边距：行的左内容边就是那枚图标。
+                padding: const EdgeInsets.only(left: 12),
                 child: Divider(height: 1, color: pal.hairline),
               ),
             TxRow(
               icon: txs[i].isPayment ? Icons.south_east : Icons.north_east,
               tone: txs[i].isPayment ? Tone.payable : Tone.receivable,
               title: titles[txs[i].billId] ?? '已删除的账单',
+              // 「还款/借款」不写第二遍了：箭头和金额正负号已经说了两遍，
+              // 而这一屏真正区分每行的是账单名 —— 它已经在第一行了。
               metaParts: [
-                txKindLabel(directions[txs[i].billId] ?? directionIn, txs[i].kind),
-                txs[i].occurredDate,
+                formatDateDot(txs[i].occurredDate),
                 if (txs[i].channel != null) txs[i].channel,
+                txs[i].note,
               ],
               amount: '${txSign(txs[i].kind)}¥${formatCents(txs[i].amountCents)}',
             ),

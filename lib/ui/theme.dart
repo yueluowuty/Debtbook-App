@@ -195,6 +195,34 @@ const List<Color> _avatarHues = [
   Color(0xFF0F766E),
 ];
 
+/// 账单色条的身份色。刻意不复用 [_avatarHues]：那八个里有 `0B7A52`（就是应收绿）、
+/// `B45309`（就是应付橙）和另外两个绿/青，两张应收账单的色条于是撞成同一种绿，
+/// 「按账单区分」直接失效，还和语义色混在一起读。
+/// 这四个离五个语义色都远。
+const List<Color> billBarHues = [
+  Color(0xFF0E7490), // 青
+  Color(0xFF2563EB), // 蓝
+  Color(0xFF7C3AED), // 紫
+  Color(0xFFBE185D), // 玫红
+];
+
+/// 账单标题 → 首选色位。算法与 [LedgerPalette.hueOf] 同理：不用
+/// String.hashCode（Dart 不保证跨进程稳定）。
+/// 只保证「同一标题永远同一格」，**不保证同一个人的两张账单不撞色** ——
+/// 撞色由调用方（人员页）避让，见 `billBarHues` 的用法的注释。
+int billBarHueSeed(String title) {
+  var sum = 0;
+  for (final r in title.runes) {
+    sum = (sum + r) % 997;
+  }
+  return sum % billBarHues.length;
+}
+
+/// 归档行的底色。刻意比 `neutralSoft`（EAEFF4）再深一档：页面底本身就是
+/// 245,247,250 这一带的浅灰，只暗 20 个级差的卡片在列表里分不出「这是另一拨」，
+/// 而分得出来正是归档这一组唯一的目的。
+const Color archivedTint = Color(0xFFDCE4EC);
+
 /// 中性色单独提出来：组件主题里要在 const 表达式里用到它们，
 /// 而 `_lightPalette.meta` 这种属性访问在常量表达式里不合法。
 const Color _meta = Color(0xFF6B7885);

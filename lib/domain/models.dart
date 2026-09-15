@@ -86,12 +86,11 @@ bool isValidDateIso(String? s) {
 
 final RegExp _datePattern = RegExp(r'^\d{4}-\d{2}-\d{2}$');
 
-/// 界面展示用的中文短日期；非法输入原样返回，不让界面崩。
-String formatDateCn(String iso) {
-  if (!isValidDateIso(iso)) return iso;
-  final parts = iso.split('-');
-  return '${parts[0]}年${int.parse(parts[1])}月${int.parse(parts[2])}日';
-}
+/// 界面展示用的点分日期：`2026-09-05` -> `2026.09.05`（保留前导零）。
+/// 存储、比较、排序一律还是 ISO `yyyy-MM-dd`，这个函数只用于显示。
+/// 非法输入原样返回，不让界面崩。
+String formatDateDot(String iso) =>
+    isValidDateIso(iso) ? iso.replaceAll('-', '.') : iso;
 
 class Contact {
   const Contact({

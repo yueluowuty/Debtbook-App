@@ -31,6 +31,21 @@ void main() {
     });
   });
 
+  group('formatDateDot', () {
+    test('ISO 转点分，前导零必须保留', () {
+      expect(formatDateDot('2026-09-05'), '2026.09.05');
+      expect(formatDateDot('2026-01-01'), '2026.01.01');
+      expect(formatDateDot('2028-02-29'), '2028.02.29');
+    });
+
+    test('非法输入原样返回，不让界面崩', () {
+      expect(formatDateDot(''), '');
+      expect(formatDateDot('2026-9-5'), '2026-9-5');
+      expect(formatDateDot('2026-04-31'), '2026-04-31');
+      expect(formatDateDot('20260905'), '20260905');
+    });
+  });
+
   group('口径标签', () {
     test('同一 kind 在两种方向账单上含义不同', () {
       expect(txKindLabel(directionIn, kindPrincipal), '借出');

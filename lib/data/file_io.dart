@@ -10,7 +10,6 @@ import 'package:path/path.dart' as p;
 
 import '../db/helper.dart';
 import '../db/repo.dart';
-import '../domain/csv_report.dart';
 import '../domain/snapshot.dart';
 
 const String kExportsDirName = 'exports';
@@ -19,13 +18,6 @@ const String kBackupsDirName = 'backups';
 /// 自动备份只保留最近这么多份。再多就是占用户空间了，
 /// 真要长期留档应该导出手动备份并自己存走。
 const int kMaxAutoBackups = 5;
-
-/// 文件名里的日期，与 occurred_date 同一种口径。
-String dayIso([DateTime? now]) {
-  final n = now ?? DateTime.now();
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${n.year}-${two(n.month)}-${two(n.day)}';
-}
 
 /// 文件名里的时间戳。字典序即时间序，排序与裁剪都靠它，不用改文件属性。
 String fileStamp([DateTime? now]) {
@@ -68,35 +60,6 @@ Future<File> writeSnapshotExport(
   final dir = await _ensureDir(p.join(docsDir, kExportsDirName));
   return _dumpSnapshot(repo, dir, fileName ?? 'debtbook_${fileStamp()}.json',
       appVersion: appVersion);
-}
-
-/// 三份对账用 CSV，一次全出，返回路径列表。
-Future<List<File>> writeCsvExports(
-  LedgerRepo repo,
-  String docsDir, {
-  String? dateIso,
-}) async {
-  final input = CsvInput(
-    contacts: await repo.allContacts(),
-    bills: await repo.allBills(),
-    txs: await repo.allTxs(),
-  );
-  final day = dateIso ?? dayIso();
-  final dir = await _ensureDir(p.join(docsDir, kExportsDirName));
-
-  final reports = <String, String>{
-    '流水明细': buildTransactionCsv(input),
-    '账单汇总': buildBillSummaryCsv(input),
-    '人员汇总': buildContactSummaryCsv(input),
-  };
-
-  final files = <File>[];
-  for (final entry in reports.entries) {
-    final file = File(p.join(dir.path, csvFileName(entry.key, day)));
-    await file.writeAsString(entry.value, flush: true);
-    files.add(file);
-  }
-  return files;
 }
 
 /// 导入前把当前库原样备份一份，并把超出保留数的旧备份删掉。

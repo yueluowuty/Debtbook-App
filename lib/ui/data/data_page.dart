@@ -27,30 +27,12 @@ class DataPage extends StatefulWidget {
 
 class _DataPageState extends State<DataPage> {
   LedgerStore? _store;
-  List<FileBackup> _backups = const [];
   bool _busy = false;
 
   @override
   void initState() {
     super.initState();
     _store = StoreScope.read(context);
-    _loadBackups();
-  }
-
-  Future<void> _loadBackups() async {
-    final files = await listAutoBackups(_store!.docsDir);
-    final backups = <FileBackup>[];
-    for (final f in files) {
-      backups.add(
-        FileBackup(
-          file: f,
-          bytes: await f.length(),
-          modified: await f.lastModified(),
-        ),
-      );
-    }
-    if (!mounted) return;
-    setState(() => _backups = backups);
   }
 
   Future<void> _guard(Future<void> Function() action) async {
@@ -90,17 +72,6 @@ class _DataPageState extends State<DataPage> {
     _toast('已导出并调起分享：${p.basename(file.path)}');
   });
 
-  Future<void> _exportCsv() => _guard(() async {
-    final files = await writeCsvExports(_store!.repo, _store!.docsDir);
-    await SharePlus.instance.share(
-      ShareParams(
-        files: [for (final f in files) XFile(f.path)],
-        title: '导出对账报表',
-      ),
-    );
-    _toast('已导出 ${files.length} 份 CSV');
-  });
-
   // ------------------------------------------------------------- 导入
 
   Future<void> _pickAndImport() async {
@@ -113,13 +84,6 @@ class _DataPageState extends State<DataPage> {
     await _guard(() async {
       final decoded = await readSnapshotFileBytes(await picked.readAsBytes());
       await _importDecoded(decoded, sourceName: picked.name);
-    });
-  }
-
-  Future<void> _importFromBackup(FileBackup b) async {
-    await _guard(() async {
-      final decoded = await readSnapshotFileBytes(await b.file.readAsBytes());
-      await _importDecoded(decoded, sourceName: b.name);
     });
   }
 
@@ -166,7 +130,6 @@ class _DataPageState extends State<DataPage> {
     );
     await store.repo.replaceAll(data);
     await store.reload();
-    await _loadBackups();
     _toast('导入完成，覆盖前的数据已存为 ${p.basename(backup.path)}');
   }
 
@@ -207,40 +170,6 @@ class _DataPageState extends State<DataPage> {
         ],
       ),
     );
-  }
-
-  Future<void> _clearAll() async {
-    final pal = LedgerPalette.of(context);
-    final yes = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('清空全部数据？'),
-        content: const Text(
-          '借款人、账单、流水全部删除，不可撤销。\n'
-          '建议先导出一次备份。',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: pal.danger),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('确认清空'),
-          ),
-        ],
-      ),
-    );
-    if (yes != true) return;
-    await _guard(() async {
-      final store = _store!;
-      await writeAutoBackup(store.repo, store.docsDir, appVersion: kAppVersion);
-      await store.repo.clearEverything();
-      await store.reload();
-      await _loadBackups();
-      _toast('已清空，清空前的数据已自动备份');
-    });
   }
 
   // ------------------------------------------------------------- 检查更新
@@ -333,9 +262,7 @@ class _DataPageState extends State<DataPage> {
 
   @override
   Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
     final pal = LedgerPalette.of(context);
-    final t = store.totals;
 
     return Scaffold(
       appBar: AppBar(title: const Text('备份与恢复')),
@@ -343,104 +270,27 @@ class _DataPageState extends State<DataPage> {
         padding: const EdgeInsets.only(bottom: 32, top: 8),
         children: [
           _Section(
-            title: '当前数据',
-            accent: pal.info,
-            child: TintedCard(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-              child: _StatGrid([
-                _Stat('借款人', '${store.contacts.length}'),
-                _Stat(
-                  '应收',
-                  '¥${formatCents(t.receivableCents)}',
-                  tone: Tone.receivable,
-                ),
-                _Stat(
-                  '应付',
-                  '¥${formatCents(t.payableCents)}',
-                  tone: Tone.payable,
-                ),
-                if (store.archivedCount > 0)
-                  _Stat('含归档', '${store.archivedCount}'),
-              ]),
-            ),
-          ),
-          _Section(
             title: '备份',
             accent: pal.info,
-            child: Column(
-              children: [
-                _ActionTile(
-                  icon: Icons.download_outlined,
-                  tone: Tone.info,
-                  title: '导出 JSON 快照',
-                  subtitle: '完整数据，可用于恢复。每次记完账都建议导一份。',
-                  busy: _busy,
-                  onTap: _exportSnapshot,
-                ),
-                _ActionTile(
-                  icon: Icons.table_chart_outlined,
-                  tone: Tone.info,
-                  title: '导出 3 份 CSV 报表',
-                  subtitle: '流水明细 / 账单汇总 / 人员汇总，给 Excel 对账用，不能用来恢复。',
-                  busy: _busy,
-                  onTap: _exportCsv,
-                ),
-              ],
+            child: _ActionTile(
+              icon: Icons.download_outlined,
+              tone: Tone.info,
+              title: '导出 JSON 快照',
+              subtitle: '完整数据，可用于恢复。每次记完账都建议导一份。',
+              busy: _busy,
+              onTap: _exportSnapshot,
             ),
           ),
           _Section(
             title: '恢复',
             accent: pal.receivable,
-            child: Column(
-              children: [
-                _ActionTile(
-                  icon: Icons.upload_outlined,
-                  tone: Tone.receivable,
-                  title: '从文件导入',
-                  subtitle: '导入前会校验并预览，当前数据先自动备份。',
-                  busy: _busy,
-                  onTap: _pickAndImport,
-                ),
-                if (_backups.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(4, 8, 4, 4),
-                    child: Text(
-                      '还没有自动备份。每次导入或清空前都会自动生成一份。',
-                      style: Theme.of(context).textTheme.bodySmall,
-                    ),
-                  )
-                else
-                  TintedCard(
-                    margin: const EdgeInsets.only(top: 8),
-                    padding: const EdgeInsets.symmetric(vertical: 2),
-                    child: Column(
-                      children: [
-                        for (final b in _backups)
-                          ListTile(
-                            leading: Icon(
-                              Icons.history,
-                              size: 20,
-                              color: pal.meta,
-                            ),
-                            title: Text(
-                              b.name,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            subtitle: Text(
-                              '${_humanBytes(b.bytes)} · ${_fmtTime(b.modified)}',
-                            ),
-                            trailing: TextButton(
-                              onPressed: _busy
-                                  ? null
-                                  : () => _importFromBackup(b),
-                              child: const Text('回滚'),
-                            ),
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
+            child: _ActionTile(
+              icon: Icons.upload_outlined,
+              tone: Tone.receivable,
+              title: '从文件导入',
+              subtitle: '导入前会校验并预览，当前数据先自动备份。',
+              busy: _busy,
+              onTap: _pickAndImport,
             ),
           ),
           _Section(
@@ -453,18 +303,6 @@ class _DataPageState extends State<DataPage> {
               subtitle: '对比 Releases 里的最新版本并下载安装包；只有点这里才会联网。',
               busy: _busy,
               onTap: _checkUpdate,
-            ),
-          ),
-          _Section(
-            title: '危险操作',
-            accent: pal.danger,
-            child: _ActionTile(
-              icon: Icons.delete_forever_outlined,
-              tone: Tone.danger,
-              title: '清空全部数据',
-              subtitle: '清空前同样会自动备份。',
-              busy: _busy,
-              onTap: _clearAll,
             ),
           ),
           Padding(
@@ -504,18 +342,6 @@ class _DataPageState extends State<DataPage> {
       ),
     );
   }
-}
-
-class FileBackup {
-  const FileBackup({
-    required this.file,
-    required this.bytes,
-    required this.modified,
-  });
-  final File file;
-  final int bytes;
-  final DateTime modified;
-  String get name => p.basename(file.path);
 }
 
 class _UpdatePanel extends StatelessWidget {
@@ -639,82 +465,6 @@ class _Section extends StatelessWidget {
   }
 }
 
-/// 两列网格。之前用的是 Wrap，但 Wrap 的格子宽度跟着内容走，
-/// 落单的那一格会在右侧留一块不规则的空隙，看起来像没排完。
-class _StatGrid extends StatelessWidget {
-  const _StatGrid(this.stats);
-  final List<Widget> stats;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var i = 0; i < stats.length; i += 2)
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(
-              children: [
-                Expanded(child: stats[i]),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: i + 1 < stats.length
-                      ? stats[i + 1]
-                      : const SizedBox.shrink(),
-                ),
-              ],
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-class _Stat extends StatelessWidget {
-  const _Stat(this.label, this.value, {this.tone});
-  final String label;
-  final String value;
-  final Tone? tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final pal = LedgerPalette.of(context);
-    final t = tone;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: BoxDecoration(
-        color: t == null ? pal.neutralSoft : pal.soft(t),
-        borderRadius: BorderRadius.circular(kRadiusSm),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: t == null ? pal.meta : pal.onSoft(t),
-            ),
-          ),
-          const SizedBox(height: 1),
-          // 这里刻意保留精确千分位（这是核对备份用的），但一整串数字没有断行机会，
-          // 应收上千万时会顶破半宽的格子 —— 缩放而不是截断。
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              maxLines: 1,
-              style: theme.textTheme.titleLarge?.copyWith(
-                color: t == null ? theme.colorScheme.onSurface : pal.ink(t),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _ActionTile extends StatelessWidget {
   const _ActionTile({
     required this.icon,
@@ -777,9 +527,4 @@ String _humanBytes(int bytes) {
   if (bytes < 1024) return '$bytes B';
   if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
   return '${(bytes / 1024 / 1024).toStringAsFixed(1)} MB';
-}
-
-String _fmtTime(DateTime d) {
-  String two(int v) => v.toString().padLeft(2, '0');
-  return '${d.month}-${two(d.day)} ${two(d.hour)}:${two(d.minute)}';
 }

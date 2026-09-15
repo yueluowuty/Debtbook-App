@@ -946,19 +946,6 @@ void main() {
       expect(await dump(), first, reason: '再走一遍仍然不变，说明幂等');
       await db.close();
     });
-
-    test('清空全库', () async {
-      final (db, repo) = await open('clear');
-      final cid = await repo.insertContact(name: '张三');
-      final bid = await newBill(repo, cid);
-      await seed(repo, bid, [(kindPrincipal, 100000, '2026-01-01')]);
-
-      await repo.clearEverything();
-      expect(await repo.contactCount(includeArchived: true), 0);
-      expect(await repo.allBills(), isEmpty);
-      expect(await repo.allTxs(), isEmpty);
-      await db.close();
-    });
   });
 }
 

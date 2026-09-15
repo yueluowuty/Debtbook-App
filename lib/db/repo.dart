@@ -516,10 +516,4 @@ class LedgerRepo {
       }
     });
   }
-
-  Future<void> clearEverything() => db.transaction((txn) async {
-        await txn.delete(kTableTransactions);
-        await txn.delete(kTableBills);
-        await txn.delete(kTableContacts);
-      });
 }

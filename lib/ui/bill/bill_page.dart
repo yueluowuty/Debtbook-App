@@ -77,7 +77,7 @@ class _BillPageState extends State<BillPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('删除这笔流水？'),
-        content: Text('金额 ¥${formatCents(tx.amountCents)}，日期 ${tx.occurredDate}。\n'
+        content: Text('金额 ¥${formatCents(tx.amountCents)}，日期 ${formatDateDot(tx.occurredDate)}。\n'
             '删除后本账单余额会按剩余流水自动重算。'),
         actions: [
           TextButton(
@@ -298,7 +298,8 @@ class _BillPageState extends State<BillPage> {
                       for (var i = 0; i < _txs.length; i++) ...[
                         if (i > 0)
                           Padding(
-                            padding: const EdgeInsets.only(left: 50),
+                            // 12 = TxRow 自己的横向内边距：行的左内容边就是那枚图标。
+                            padding: const EdgeInsets.only(left: 12),
                             child: Divider(height: 1, color: pal.hairline),
                           ),
                         TxRow(
@@ -310,7 +311,7 @@ class _BillPageState extends State<BillPage> {
                               : Tone.receivable,
                           title: txKindLabel(bill.direction, _txs[i].kind),
                           metaParts: [
-                            _txs[i].occurredDate,
+                            formatDateDot(_txs[i].occurredDate),
                             _txs[i].channel,
                             _txs[i].note,
                           ],

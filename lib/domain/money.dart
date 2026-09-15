@@ -32,7 +32,7 @@ int? parseYuanToCents(String input) {
 String formatCents(int cents) =>
     '${_sign(cents)}${_group('${_abs(cents ~/ 100)}')}.${_frac(cents)}';
 
-/// 无千分位，供 CSV 使用，便于 Excel 当数字处理与求和。
+/// 无千分位的精确金额，给需要原样解析的场景（表格、剪贴板）用。
 String formatCentsPlain(int cents) =>
     '${_sign(cents)}${_abs(cents ~/ 100)}.${_frac(cents)}';
 

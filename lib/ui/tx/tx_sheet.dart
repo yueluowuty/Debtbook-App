@@ -252,7 +252,8 @@ class _TxFormState extends State<_TxForm> {
                       labelText: '发生日期',
                       suffixIcon: Icon(Icons.calendar_today_outlined, size: 18),
                     ),
-                    child: Text(_isoDate(_date)),
+                    // 只改显示：提交的仍是 _isoDate(_date)，没人反解这个串。
+                    child: Text(formatDateDot(_isoDate(_date))),
                   ),
                 ),
                 const SizedBox(height: 12),

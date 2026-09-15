@@ -17,6 +17,7 @@ import 'package:debtbook/domain/models.dart';
 import 'package:debtbook/state/store.dart';
 import 'package:debtbook/ui/home/home_page.dart';
 import 'package:debtbook/ui/theme.dart';
+import 'package:debtbook/ui/widgets/ledger_widgets.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -171,6 +172,88 @@ void main() {
 
     await pump(tester, const HomePage());
     expect(find.text('大字号借款人'), findsWidgets);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('人名只在色块胶囊里出现一次，长名 + 归档徽标也不撑破行', (tester) async {
+    // 列表项原来把名字写两遍：胶囊里一个首字、旁边一行全名。现在只剩胶囊，
+    // 所以这条守三件事：全名出现且**只**出现一次、胶囊与「已归档」徽标同行
+    // 时不把手机号和金额挤到溢出、日期已经是 yyyy.MM.dd 而不是从 ISO 掐出来的 MM-dd。
+    await act(tester, () async {
+      final repo = store.repo;
+      final cid = await repo.insertContact(
+          name: '王志强（老家表哥）', phone: '13800000000');
+      final bid = await repo.insertBill(
+          contactId: cid, title: '装修尾款', direction: directionIn);
+      await repo.insertTx(
+          billId: bid,
+          kind: kindPrincipal,
+          amountCents: 12345678,
+          occurredDate: '2026-09-01');
+      await repo.setContactArchived(cid, true);
+      store.includeArchived = true;
+      await store.reload();
+    });
+
+    tester.platformDispatcher.textScaleFactorTestValue = 1.6;
+    tester.view.physicalSize = const Size(1080, 2400);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.platformDispatcher.clearTextScaleFactorTestValue);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    await pump(tester, const HomePage());
+    expect(find.text('王志强（老家表哥）'), findsOneWidget);
+    expect(find.textContaining('最近 2026.09.01'), findsOneWidget);
+    // 手机号必须是一整行。胶囊比原来定宽的头像占地方，半个槽位一度把
+    // 11 位号码折成「1381234567 / 8」两截 —— 折行不抛异常，takeException
+    // 抓不到，只有这条高度断言抓得到（真机截图当时抓到的就是它）。
+    expect(tester.getRect(find.text('13800000000')).height, lessThan(30),
+        reason: 'bodySmall 在 1.6 倍字号下约 25 高，超过就说明号码被折成两行');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('流水行：金额在第一行右上角，时间·渠道·备注在整宽的第二行',
+      (tester) async {
+    // PersonPage / BillPage 在 FakeAsync 里加载不完（见文件头），所以直接 pump
+    // TxRow 本身。金额贴右靠的是「必须 Expanded 而不是 Flexible」那条不变量，
+    // 谁把它改回 Flexible 或裸 Text，这一条立刻红。
+    const amount = '+¥1,234,567.89';
+    await tester.pumpWidget(MaterialApp(
+      theme: buildDebtBookTheme(),
+      locale: const Locale('zh', 'CN'),
+      supportedLocales: const [Locale('zh', 'CN'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: const Scaffold(
+        body: Align(
+          alignment: Alignment.topLeft,
+          child: SizedBox(
+            width: 320,
+            child: TxRow(
+              icon: Icons.south_east,
+              title: '还款',
+              metaParts: ['2026.09.01', '微信', '还了第一个一千'],
+              amount: amount,
+            ),
+          ),
+        ),
+      ),
+    ));
+
+    // FittedBox 会吞掉自己的缩放变换，量 Text 量到的是缩放前的布局框；
+    // 量它本身才等于槽位右边缘。
+    final box = find.ancestor(
+        of: find.text(amount), matching: find.byType(FittedBox));
+    final rowRight = tester.getRect(find.byType(TxRow)).right;
+    expect(tester.getRect(box).right, closeTo(rowRight - 12, 0.5),
+        reason: '金额必须贴着行的右边缘（TxRow 自己那 12 的内边距之外）');
+    expect(tester.getRect(box).top,
+        lessThan(tester.getRect(find.textContaining('2026.09.01')).top),
+        reason: '金额在第一行，时间·渠道·备注在第二行');
     expect(tester.takeException(), isNull);
   });
 

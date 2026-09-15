@@ -221,6 +221,12 @@ class SectionHeader extends StatelessWidget {
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(kRadiusSm),
+      // 水波纹/高亮全部抹平：点「全部流水」时标题行后面会糊出一块灰底，
+      // 看着像多了一层背景。折叠状态本来就有那个旋转箭头在反馈，够了。
+      // 仍然用 InkWell 而不是 GestureDetector：它保留焦点与无障碍语义。
+      splashColor: Colors.transparent,
+      highlightColor: Colors.transparent,
+      hoverColor: Colors.transparent,
       child: padded,
     );
   }
@@ -272,18 +278,35 @@ class MetaLine extends StatelessWidget {
   }
 }
 
-/// 人名头像：同一名字恒同一色相，扫列表时比读字快。
+/// 人名胶囊：高度恒为 [size]，宽度随全名自适应。
+/// 同一名字恒同一色相，扫列表时比读字快。
 class PersonAvatar extends StatelessWidget {
   const PersonAvatar({
     super.key,
     required this.name,
     this.size = 44,
     this.muted = false,
+    this.textStyle,
+    this.maxChars,
+    this.maxWidth,
   });
 
   final String name;
   final double size;
   final bool muted;
+
+  /// null = titleMedium + w700。字号刻意不跟 [size] 走：两个调用点要的字号
+  /// （列表 15 / 页面标题 17）和两个 size（44 / 34）不成比例，
+  /// 没有任何一个系数能同时给对，所以交给调用点。
+  final TextStyle? textStyle;
+
+  /// 最多放几个字。非空时字号**固定不缩**，超出的走省略号 —— 列表里所有人
+  /// 的名字于是同一个字号，左边缘是一条整齐的边线。
+  /// 为空时宽度按 [maxWidth] 自适应，尽量把全名放下（详情页要的是全名）。
+  final int? maxChars;
+
+  /// 仅在 [maxChars] 为空时生效；null = 屏宽的 38% 与 168 取小。
+  final double? maxWidth;
 
   @override
   Widget build(BuildContext context) {
@@ -291,19 +314,51 @@ class PersonAvatar extends StatelessWidget {
     final theme = Theme.of(context);
     final hue = pal.hueOf(name);
     final fg = muted ? pal.meta : hue;
-    return Container(
-      width: size,
-      height: size,
+    final style = (textStyle ?? theme.textTheme.titleMedium)
+        ?.copyWith(color: fg, fontWeight: FontWeight.w700);
+    final pad = size * .30;
+    // 按**缩放后**的字号算宽度：这样 maxChars: 5 在 1.6 倍系统字号下仍是
+    // 5 个字，而不是按比例缩成 3 个字加省略号。
+    final glyph =
+        MediaQuery.textScalerOf(context).scale(style?.fontSize ?? 14) + 1;
+    double cap = maxChars != null
+        ? maxChars! * glyph + pad * 2
+        // 168 那道天花板是给「按屏宽算」的默认值兜底的，调用方显式给的
+        // maxWidth 不能再被它夹掉 —— 详情页要放全名，传了 220 却只拿到 168。
+        : (maxWidth ??
+            (MediaQuery.sizeOf(context).width * .38).clamp(0.0, 168.0));
+    if (cap < size) cap = size; // 别让上限把最小宽度切掉
+
+    return DecoratedBox(
       decoration: BoxDecoration(
         color: fg.withValues(alpha: muted ? .10 : .13),
-        borderRadius: BorderRadius.circular(size * .32),
+        borderRadius: BorderRadius.circular(size / 2),
       ),
-      alignment: Alignment.center,
-      child: Text(
-        name.characters.take(1).toString(),
-        style: theme.textTheme.titleMedium?.copyWith(
-          color: fg,
-          fontWeight: FontWeight.w700,
+      // 不用带 alignment 的 Container —— 那种盒会把自己撑到 maxWidth，
+      // 于是每个名字都变成同一个最宽胶囊，「自适应」直接失效。
+      // ConstrainedBox 必须自己封顶：非 flex 孩子从 Row 拿到的是无限宽主约束。
+      child: SizedBox(
+        height: size,
+        child: ConstrainedBox(
+          constraints: BoxConstraints(minWidth: size, maxWidth: cap),
+          child: Padding(
+            padding: EdgeInsets.symmetric(horizontal: pad),
+            // Column 而不是 Center：Center 会把自己撑到 maxWidth，每个胶囊都变成
+            // 同一个最宽块，「随名字自适应」直接失效。Column 的宽度取最宽的孩子
+            // （就是文字本身），主轴又把 SizedBox 的定高填满、把文字摆到中线上 ——
+            // 之前缺的就是这一步，字一直贴在胶囊上沿。
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  name.isEmpty ? ' ' : name,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: style,
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -340,6 +395,7 @@ class IconBadge extends StatelessWidget {
 
 /// 一笔流水的行。人员页时间线与账单页流水表共用同一行式，
 /// 免得两处字号、配色、对齐各长一套。
+/// 固定两行：第一行「标题 + 右上角金额」，第二行整宽的「时间 · 渠道 · 备注」。
 class TxRow extends StatelessWidget {
   const TxRow({
     super.key,
@@ -366,59 +422,61 @@ class TxRow extends StatelessWidget {
     final theme = Theme.of(context);
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (icon != null) ...[
-            Container(
-              width: 26,
-              height: 26,
-              decoration: BoxDecoration(
-                color: pal.soft(tone),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(icon, size: 15, color: pal.onSoft(tone)),
-            ),
-            const SizedBox(width: 10),
-          ],
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
+          Row(
+            children: [
+              if (icon != null) ...[
+                Container(
+                  width: 26,
+                  height: 26,
+                  decoration: BoxDecoration(
+                    color: pal.soft(tone),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, size: 15, color: pal.onSoft(tone)),
+                ),
+                const SizedBox(width: 10),
+              ],
+              Expanded(
+                child: Text(
                   title,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: theme.textTheme.titleSmall,
                 ),
-                // 大字号下这一行必然放不下；让它折成一行加省略号，
-                // 否则左侧变两行、右侧金额就跟着错位，看着像撞在一起。
-                MetaLine(
-                  gap: 1,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  parts: metaParts,
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          // 必须是 Expanded 而不是 Flexible：两者默认 flex 都是 1、都只分到一半空间，
-          // 但 Flexible 不要求填满，金额就停在槽位起点、没贴到行的右边缘。
-          // 也不能退回非 flex 孩子 —— Row 给非 flex 孩子无限宽主约束，
-          // 裸 Text 里的 FittedBox 永远不会缩放，长金额直接顶穿行宽。
-          Expanded(
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerRight,
-              child: Text(
-                amount,
-                maxLines: 1,
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: pal.ink(tone),
-                  fontWeight: FontWeight.w700,
+              ),
+              const SizedBox(width: 8),
+              // 必须是 Expanded 而不是 Flexible：两者默认 flex 都是 1、都只分到一半空间，
+              // 但 Flexible 不要求填满，金额就停在槽位起点、没贴到行的右边缘。
+              // 也不能退回非 flex 孩子 —— Row 给非 flex 孩子无限宽主约束，
+              // 裸 Text 里的 FittedBox 永远不会缩放，长金额直接顶穿行宽。
+              // 金额要落在第一行的右上角，靠的就是这两条。
+              Expanded(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  alignment: Alignment.centerRight,
+                  child: Text(
+                    amount,
+                    maxLines: 1,
+                    style: theme.textTheme.titleSmall?.copyWith(
+                      color: pal.ink(tone),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
               ),
-            ),
+            ],
+          ),
+          // 第二行是 Column 的直接孩子，不再被左边那半个宽度卡着，
+          // 于是整行宽度都归它，时间 · 渠道 · 备注 放得下的比原来多得多。
+          // 放不下时仍折成一行加省略号，免得这列变两行把行高撑乱。
+          MetaLine(
+            gap: 2,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            parts: metaParts,
           ),
         ],
       ),
