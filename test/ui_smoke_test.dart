@@ -213,11 +213,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('流水行：金额在第一行右上角，时间·渠道·备注在整宽的第二行',
+  testWidgets('流水行：图标居中，标题与描述左对齐，金额与标题同行同字号并贴右',
       (tester) async {
     // PersonPage / BillPage 在 FakeAsync 里加载不完（见文件头），所以直接 pump
-    // TxRow 本身。金额贴右靠的是「必须 Expanded 而不是 Flexible」那条不变量，
-    // 谁把它改回 Flexible 或裸 Text，这一条立刻红。
+    // TxRow 本身。这一条盯住四件事：金额贴右、金额和标题同一行同一字号、
+    // 描述与标题左边缘齐平、图标在文字块上下居中。
     const amount = '+¥1,234,567.89';
     await tester.pumpWidget(MaterialApp(
       theme: buildDebtBookTheme(),
@@ -244,17 +244,61 @@ void main() {
       ),
     ));
 
-    // FittedBox 会吞掉自己的缩放变换，量 Text 量到的是缩放前的布局框；
-    // 量它本身才等于槽位右边缘。
-    final box = find.ancestor(
-        of: find.text(amount), matching: find.byType(FittedBox));
-    final rowRight = tester.getRect(find.byType(TxRow)).right;
-    expect(tester.getRect(box).right, closeTo(rowRight - 12, 0.5),
+    final rowRect = tester.getRect(find.byType(TxRow));
+    final amountRect = tester.getRect(find.text(amount));
+    final titleRect = tester.getRect(find.text('还款'));
+    final metaRect = tester.getRect(find.textContaining('2026.09.01'));
+    final iconBox = find.ancestor(
+        of: find.byIcon(Icons.south_east), matching: find.byType(Container));
+
+    expect(amountRect.right, closeTo(rowRect.right - 12, 0.5),
         reason: '金额必须贴着行的右边缘（TxRow 自己那 12 的内边距之外）');
-    expect(tester.getRect(box).top,
-        lessThan(tester.getRect(find.textContaining('2026.09.01')).top),
+    expect(amountRect.top, closeTo(titleRect.top, 0.5),
+        reason: '金额和标题在同一行，不是垂在两行中间');
+    expect(tester.widget<Text>(find.text(amount)).style?.fontSize,
+        tester.widget<Text>(find.text('还款')).style?.fontSize,
+        reason: '金额字号与标题一致，不许被 FittedBox 缩放');
+    expect(amountRect.bottom, lessThanOrEqualTo(metaRect.top),
         reason: '金额在第一行，时间·渠道·备注在第二行');
+    expect(titleRect.left, closeTo(metaRect.left, 0.5),
+        reason: '描述左边缘与标题对齐');
+    expect(tester.getRect(iconBox).center.dy,
+        closeTo(((titleRect.top + metaRect.bottom) / 2), 1.0),
+        reason: '图标相对两行文字上下居中');
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('归还进度：超付只写 100%+，不画真实倍数', (tester) async {
+    // 借出 5 万、还了 5 千五百万，曾经原样印出「110788%」。
+    await pump(
+      tester,
+      const Scaffold(
+        body: RepaymentProgress(
+          sideLabel: '他还我',
+          paid: 5556573100,
+          principal: 5015500,
+          tone: Tone.payable,
+        ),
+      ),
+    );
+    expect(find.text('100%+'), findsOneWidget);
+    expect(find.textContaining('%'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('归还进度：刚好还清写 100%，不带加号', (tester) async {
+    await pump(
+      tester,
+      const Scaffold(
+        body: RepaymentProgress(
+          sideLabel: '他还我',
+          paid: 500000,
+          principal: 500000,
+          tone: Tone.receivable,
+        ),
+      ),
+    );
+    expect(find.text('100%'), findsOneWidget);
   });
 
   testWidgets('姓名留空时不允许提交', (tester) async {

@@ -8,7 +8,6 @@ Map<String, Object?> contactRow(
   int id, {
   String name = '张三',
   String? phone,
-  String? note,
   int archived = 0,
   String createdAt = '2026-01-01T09:00:00.000',
 }) =>
@@ -16,7 +15,6 @@ Map<String, Object?> contactRow(
       'id': id,
       'name': name,
       'phone': phone,
-      'note': note,
       'archived': archived,
       'created_at': createdAt,
     };
@@ -32,6 +30,7 @@ Map<String, Object?> billRow(
   int balanceCents = 0,
   String createdAt = '2026-01-01T09:00:00.000',
   String updatedAt = '2026-01-01T09:00:00.000',
+  int initialCents = 0,
 }) =>
     <String, Object?>{
       'id': id,
@@ -44,6 +43,7 @@ Map<String, Object?> billRow(
       'balance_cents': balanceCents,
       'created_at': createdAt,
       'updated_at': updatedAt,
+      'initial_cents': initialCents,
     };
 
 Map<String, Object?> txRow(

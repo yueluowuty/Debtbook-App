@@ -26,7 +26,6 @@ class _ContactFormState extends State<_ContactForm> {
   final _formKey = GlobalKey<FormState>();
   late final _name = TextEditingController(text: widget.contact?.name ?? '');
   late final _phone = TextEditingController(text: widget.contact?.phone ?? '');
-  late final _note = TextEditingController(text: widget.contact?.note ?? '');
   bool _saving = false;
 
   bool get _isEdit => widget.contact != null;
@@ -35,7 +34,6 @@ class _ContactFormState extends State<_ContactForm> {
   void dispose() {
     _name.dispose();
     _phone.dispose();
-    _note.dispose();
     super.dispose();
   }
 
@@ -49,13 +47,11 @@ class _ContactFormState extends State<_ContactForm> {
           id: widget.contact!.id,
           name: _name.text,
           phone: _phone.text,
-          note: _note.text,
         );
       } else {
         await store.repo.insertContact(
           name: _name.text,
           phone: _phone.text,
-          note: _note.text,
         );
       }
       store.invalidate();
@@ -104,16 +100,6 @@ class _ContactFormState extends State<_ContactForm> {
                   decoration: const InputDecoration(
                     labelText: '手机号（可选）',
                     prefixIcon: Icon(Icons.phone_outlined),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _note,
-                  minLines: 1,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: '备注（可选）',
-                    prefixIcon: Icon(Icons.sticky_note_2_outlined),
                   ),
                 ),
                 const SizedBox(height: 20),

@@ -46,6 +46,33 @@ void main() {
 
     test('超上限', () {
       expect(parseYuanToCents('${kMaxYuanPerTx + 1}'), isNull);
+      // 位数多到 int 都装不下，也不能当成合法金额放过去。
+      expect(parseYuanToCents('200000000000'), isNull);
+    });
+  });
+
+  group('yuanInputError 说清楚错在哪一条', () {
+    test('合法输入无报错，含 0 与空以外的边界', () {
+      expect(yuanInputError('12.34'), isNull);
+      expect(yuanInputError('$kMaxYuanPerTx'), isNull);
+    });
+
+    test('空 / 格式 / 负号 / 零 各说各的', () {
+      expect(yuanInputError(''), '请输入金额');
+      expect(yuanInputError('   '), '请输入金额');
+      expect(yuanInputError('1.234'), '金额最多两位小数');
+      expect(yuanInputError('1e3'), '金额最多两位小数');
+      expect(yuanInputError('-5'), contains('不能为负'));
+      expect(yuanInputError('0'), '金额必须大于 0');
+      expect(yuanInputError('0.00'), '金额必须大于 0');
+    });
+
+    test('超上限单独提「上限」，不再混进小数位那句', () {
+      final msg = yuanInputError('200000000000')!;
+      expect(msg, contains('单笔最大'));
+      expect(msg, contains('1亿'));
+      expect(msg, isNot(contains('两位小数')));
+      expect(yuanInputError('${kMaxYuanPerTx + 1}'), contains('单笔最大'));
     });
   });
 

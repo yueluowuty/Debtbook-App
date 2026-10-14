@@ -11,6 +11,7 @@ import '../theme.dart';
 import '../tx/tx_sheet.dart';
 import '../widgets/empty_hint.dart';
 import '../widgets/ledger_widgets.dart';
+import '../widgets/tx_flow.dart';
 
 class PersonPage extends StatefulWidget {
   const PersonPage({super.key, required this.contactId, required this.name});
@@ -31,6 +32,7 @@ class _PersonPageState extends State<PersonPage> {
   /// 「全部流水」默认收起：一个人几十笔流水时，账单列表会被顶到屏幕外，
   /// 而进这一页九成是为了看账单，不是翻流水。
   bool _txExpanded = false;
+  int _txPage = 1;
 
   @override
   void initState() {
@@ -147,6 +149,7 @@ class _PersonPageState extends State<PersonPage> {
         _bills.where((b) => b.direction == directionIn).fold<int>(0, (s, b) => s + b.balanceCents);
     final payable =
         _bills.where((b) => b.direction == directionOut).fold<int>(0, (s, b) => s + b.balanceCents);
+    final billTitles = <int, String>{for (final b in _bills) b.id: b.title};
 
     return Scaffold(
       appBar: AppBar(
@@ -214,29 +217,13 @@ class _PersonPageState extends State<PersonPage> {
                 ),
               ),
             ),
-            if (contact.note != null)
-              Padding(
-                padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                child: TintedCard(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Icon(Icons.sticky_note_2_outlined, size: 16, color: pal.meta),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(contact.note!,
-                            style: Theme.of(context).textTheme.bodyMedium),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
             const SizedBox(height: 8),
             if (_progress != null)
               Padding(
-                padding: const EdgeInsets.fromLTRB(12, 0, 12, 0),
-                child: _RepaymentProgress(
+                // 同 BillPage：裸元素对齐到卡片的文字竖线（12 槽宽 + 12 卡内边距），
+                // 不是卡片的边线。
+                padding: const EdgeInsets.fromLTRB(24, 0, 24, 0),
+                child: RepaymentProgress(
                   sideLabel: _progress!.sideLabel,
                   paid: _progress!.paid,
                   principal: _progress!.principal,
@@ -323,81 +310,28 @@ class _PersonPageState extends State<PersonPage> {
             else if (_txExpanded)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: _TxTimeline(bills: _bills, txs: _txs),
+                child: TxFlowCard(
+                  txs: _txs,
+                  visibleCount: _txPage * kTxPageSize,
+                  rowBuilder: (tx) => TxRow(
+                    icon: tx.isPayment ? Icons.south_east : Icons.north_east,
+                    tone: tx.isPayment ? Tone.payable : Tone.receivable,
+                    title: billTitles[tx.billId] ?? '已删除的账单',
+                    // 「还款/借款」不写第二遍了：箭头和金额正负号已经说了两遍，
+                    // 而这一屏真正区分每行的是账单名 —— 它已经在第一行了。
+                    metaParts: [
+                      formatDateDot(tx.occurredDate),
+                      if (tx.channel != null) tx.channel,
+                      tx.note,
+                    ],
+                    amount:
+                        '${txSign(tx.kind)}¥${formatCents(tx.amountCents)}',
+                  ),
+                  onMore: () => setState(() => _txPage++),
+                ),
               ),
           ],
         ),
-      ),
-    );
-  }
-}
-
-/// 归还进度条。这里看的是比例，所以金额用压缩格式；
-/// 精确到分的数字在下面的账单卡片里逐单可查。
-class _RepaymentProgress extends StatelessWidget {
-  const _RepaymentProgress({
-    required this.sideLabel,
-    required this.paid,
-    required this.principal,
-    required this.tone,
-  });
-
-  final String sideLabel;
-  final int paid;
-  final int principal;
-  final Tone tone;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = LedgerPalette.of(context);
-    final theme = Theme.of(context);
-    // 百分比留在整数分里算，只有进度条那一步才要 double。
-    final percent = (paid * 100) ~/ principal;
-    final percentText = (percent == 0 && paid > 0) ? '<1%' : '$percent%';
-    return TintedCard(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '归还进度 · $sideLabel',
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: pal.meta),
-                ),
-              ),
-              Text(
-                percentText,
-                style: theme.textTheme.titleMedium?.copyWith(
-                  color: pal.ink(tone),
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(6),
-            child: LinearProgressIndicator(
-              // 超付时条子画满，但百分比照实写，不把 120% 藏成 100%。
-              value: percent > 100 ? 1 : percent / 100,
-              minHeight: 8,
-              backgroundColor: pal.soft(tone),
-              valueColor: AlwaysStoppedAnimation<Color>(pal.ink(tone)),
-            ),
-          ),
-          MetaLine(
-            gap: 6,
-            parts: [
-              '已还 ¥${formatCentsCompact(paid)}',
-              '${sideLabel == '他还我' ? '借出' : '借入'} ¥${formatCentsCompact(principal)}',
-            ],
-          ),
-        ],
       ),
     );
   }
@@ -578,46 +512,5 @@ class _BillCard extends StatelessWidget {
     final first = formatDateDot(b.firstDate!);
     final last = formatDateDot(b.lastDate!);
     return first == last ? first : '$first ~ $last';
-  }
-}
-
-class _TxTimeline extends StatelessWidget {
-  const _TxTimeline({required this.bills, required this.txs});
-  final List<Bill> bills;
-  final List<Tx> txs;
-
-  @override
-  Widget build(BuildContext context) {
-    final pal = LedgerPalette.of(context);
-    final titles = <int, String>{for (final b in bills) b.id: b.title};
-
-    return TintedCard(
-      padding: const EdgeInsets.symmetric(vertical: 2),
-      child: Column(
-        children: [
-          for (var i = 0; i < txs.length; i++) ...[
-            if (i > 0)
-              Padding(
-                // 12 = TxRow 自己的横向内边距：行的左内容边就是那枚图标。
-                padding: const EdgeInsets.only(left: 12),
-                child: Divider(height: 1, color: pal.hairline),
-              ),
-            TxRow(
-              icon: txs[i].isPayment ? Icons.south_east : Icons.north_east,
-              tone: txs[i].isPayment ? Tone.payable : Tone.receivable,
-              title: titles[txs[i].billId] ?? '已删除的账单',
-              // 「还款/借款」不写第二遍了：箭头和金额正负号已经说了两遍，
-              // 而这一屏真正区分每行的是账单名 —— 它已经在第一行了。
-              metaParts: [
-                formatDateDot(txs[i].occurredDate),
-                if (txs[i].channel != null) txs[i].channel,
-                txs[i].note,
-              ],
-              amount: '${txSign(txs[i].kind)}¥${formatCents(txs[i].amountCents)}',
-            ),
-          ],
-        ],
-      ),
-    );
   }
 }

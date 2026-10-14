@@ -40,10 +40,11 @@ void main() {
           (data[key]! as List).cast<Map<String, Object?>>();
 
       expect(rows(kSnapshotKeyContacts).first.keys,
-          ['id', 'name', 'phone', 'note', 'archived', 'created_at']);
+          ['id', 'name', 'phone', 'archived', 'created_at']);
       expect(rows(kSnapshotKeyBills).first.keys, [
         'id', 'contact_id', 'title', 'direction', 'note',
         'principal_cents', 'payment_cents', 'balance_cents', 'created_at', 'updated_at',
+        'initial_cents',
       ]);
       expect(rows(kSnapshotKeyTransactions).first.keys, [
         'id', 'bill_id', 'kind', 'amount_cents', 'occurred_date',
@@ -308,6 +309,77 @@ void main() {
 
       expect(result.ok, isTrue);
       expect(result.data!.warnings, contains(contains('contacts=99')));
+    });
+  });
+
+  group('初始金额与旧版本兼容', () {
+    test('当前快照版本是 2', () => expect(kSchemaVersion, 2));
+
+    test('v1 老文件（没有 initial_cents）照样通过，归一化补 0', () {
+      final json = consistentSnapshot(
+        bills: [billRow(10, 1)..remove('initial_cents')],
+        transactions: [txRow(100, 10, amountCents: 500000)],
+      );
+      final result = validateSnapshot(json);
+
+      expect(result.ok, isTrue, reason: result.errors.join('\n'));
+      final bill = result.data!.bills.single;
+      expect(bill['initial_cents'], 0);
+      expect(bill['principal_cents'], 500000);
+      expect(bill['balance_cents'], 500000);
+      expect(result.data!.warnings, isEmpty);
+    });
+
+    test('初始金额并入本金与余额（纯 Dart 侧与 SQL 同口径）', () {
+      final json = consistentSnapshot(
+        bills: [billRow(10, 1, initialCents: 30000)],
+        transactions: [
+          txRow(100, 10, kind: kindPrincipal, amountCents: 500000),
+          txRow(101, 10, kind: kindPayment, amountCents: 100000),
+        ],
+      );
+      final result = validateSnapshot(json);
+
+      expect(result.ok, isTrue, reason: result.errors.join('\n'));
+      expect(result.data!.warnings, isEmpty);
+      final bill = result.data!.bills.single;
+      expect(bill['principal_cents'], 530000);
+      expect(bill['payment_cents'], 100000);
+      expect(bill['balance_cents'], 430000);
+    });
+
+    test('手改错的余额连初始金额一起重算，只告警', () {
+      final json = {
+        'schemaVersion': kSchemaVersion,
+        'data': {
+          'contacts': [contactRow(1)],
+          'bills': [
+            billRow(10, 1,
+                initialCents: 30000,
+                principalCents: 1,
+                paymentCents: 2,
+                balanceCents: 999),
+          ],
+          'transactions': [
+            txRow(100, 10, kind: kindPrincipal, amountCents: 500000),
+          ],
+        },
+      };
+      final result = validateSnapshot(json);
+
+      expect(result.ok, isTrue, reason: result.errors.join('\n'));
+      expect(result.data!.bills.single['balance_cents'], 530000);
+      expect(result.data!.warnings, contains(contains('按流水重算')));
+    });
+
+    test('负数或非整数的 initial_cents 拒绝', () {
+      for (final bad in [-1, 12.5, 'abc']) {
+        final result = validateSnapshot(consistentSnapshot(
+          bills: [billRow(10, 1)..['initial_cents'] = bad],
+        ));
+        expect(result.ok, isFalse, reason: 'initial_cents=$bad 应被拒绝');
+        expect(result.errors, contains(contains('initial_cents')));
+      }
     });
   });
 

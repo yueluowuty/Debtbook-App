@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../db/repo.dart';
 import '../../domain/models.dart';
+import '../../domain/money.dart';
 import '../../state/store.dart';
 import '../theme.dart';
 import '../widgets/ledger_widgets.dart';
@@ -20,6 +21,21 @@ Future<void> showBillSheet(
   );
 }
 
+String _yuanInput(int cents) {
+  final s = formatCents(cents);
+  return s.endsWith('.00') ? s.substring(0, s.length - 3) : s;
+}
+
+/// 初始金额输入：留空或写 0 都表示没有本数。
+int? _parseInitial(String? input) {
+  final s = input?.trim() ?? '';
+  if (s.isEmpty) return 0;
+  if (RegExp(r'^0(?:\.0{1,2})?$').hasMatch(s.replaceAll(RegExp(r'[,，\s]'), ''))) {
+    return 0;
+  }
+  return parseYuanToCents(s);
+}
+
 class _BillForm extends StatefulWidget {
   const _BillForm({required this.contactId, this.bill});
   final int contactId;
@@ -33,6 +49,10 @@ class _BillFormState extends State<_BillForm> {
   final _formKey = GlobalKey<FormState>();
   late final _title = TextEditingController(text: widget.bill?.title ?? '');
   late final _note = TextEditingController(text: widget.bill?.note ?? '');
+  late final _initial = TextEditingController(
+      text: (widget.bill?.initialCents ?? 0) == 0
+          ? ''
+          : _yuanInput(widget.bill!.initialCents));
   late String _direction = widget.bill?.direction ?? directionIn;
   bool _saving = false;
 
@@ -43,6 +63,7 @@ class _BillFormState extends State<_BillForm> {
   void dispose() {
     _title.dispose();
     _note.dispose();
+    _initial.dispose();
     super.dispose();
   }
 
@@ -50,12 +71,14 @@ class _BillFormState extends State<_BillForm> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _saving = true);
     final store = StoreScope.read(context);
+    final initialCents = _parseInitial(_initial.text)!;
     try {
       if (_isEdit) {
         await store.repo.updateBill(
           id: widget.bill!.id,
           title: _title.text,
           note: _note.text,
+          initialCents: initialCents,
         );
         // 方向单独走 changeBillDirection：它会再查一次流水数，
         // 防止表单打开期间别处已经写了流水。
@@ -68,6 +91,7 @@ class _BillFormState extends State<_BillForm> {
           title: _title.text,
           direction: _direction,
           note: _note.text,
+          initialCents: initialCents,
         );
       }
       store.invalidate();
@@ -159,6 +183,21 @@ class _BillFormState extends State<_BillForm> {
                       ],
                     ),
                   ),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _initial,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: '初始金额（可选）',
+                    prefixText: '¥ ',
+                    hintText: '建账前已经欠了多少',
+                  ),
+                  validator: (v) => _parseInitial(v) != null
+                      ? null
+                      // 留空和 0 都是合法的「没有本数」，走到这儿说明确实填错了。
+                      : yuanInputError(v ?? ''),
+                ),
                 const SizedBox(height: 12),
                 TextFormField(
                   controller: _note,

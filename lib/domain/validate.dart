@@ -49,11 +49,15 @@ class SnapshotValidation {
 }
 
 const List<String> _contactCols = [
-  'id', 'name', 'phone', 'note', 'archived', 'created_at'
+  // 借款人备注已下线。旧备份里的 note 键会被 _pick 丢掉，导入照样成功；
+  // 库里那列还留着，所以全新库和升级库的导出列序仍然一致。
+  'id', 'name', 'phone', 'archived', 'created_at'
 ];
 const List<String> _billCols = [
   'id', 'contact_id', 'title', 'direction', 'note',
   'principal_cents', 'payment_cents', 'balance_cents', 'created_at', 'updated_at',
+  // v2 列。v1 旧文件没有它，_pick 的 `_cents` 规则会补 0。
+  'initial_cents',
 ];
 const List<String> _txCols = [
   'id', 'bill_id', 'kind', 'amount_cents', 'occurred_date',
@@ -143,6 +147,12 @@ SnapshotValidation validateSnapshot(Object? decoded) {
     if (!isDirection(direction)) {
       rep.add('$tag：direction=${raw['direction']} 非法，只能是 in 或 out');
     }
+    if (raw['initial_cents'] != null) {
+      final initial = asExactInt(raw['initial_cents']);
+      if (initial == null || initial < 0) {
+        rep.add('$tag：initial_cents=${raw['initial_cents']} 必须是非负整数（单位分）');
+      }
+    }
     normBills.add(_pick(raw, _billCols,
         fallbackTimestamp: fallbackTimestamp));
   }
@@ -210,12 +220,14 @@ void _reconcileDerived(
     final id = asIntOrNull(b['id']);
     if (id == null) continue;
     final (:principal, :payment) = totals[id] ?? kZeroBillTotals;
-    final correct = principal - payment;
-    if ((asIntOrNull(b['principal_cents']) ?? 0) != principal ||
+    final initial = asIntOrNull(b['initial_cents']) ?? 0;
+    final correctPrincipal = initial + principal;
+    final correct = correctPrincipal - payment;
+    if ((asIntOrNull(b['principal_cents']) ?? 0) != correctPrincipal ||
         (asIntOrNull(b['payment_cents']) ?? 0) != payment ||
         (asIntOrNull(b['balance_cents']) ?? 0) != correct) {
       drifted++;
-      b['principal_cents'] = principal;
+      b['principal_cents'] = correctPrincipal;
       b['payment_cents'] = payment;
       b['balance_cents'] = correct;
     }

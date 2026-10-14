@@ -35,6 +35,7 @@ class LedgerTotals {
 /// 三个列各自用独立子查询从 transactions 求和，其中 balance 直接用一个
 /// CASE 求和得到，而不是引用同行的 principal/payment —— 同一条 UPDATE 里
 /// 各 SET 子句读到的都是更新前的旧值，靠列相减会算错。
+/// 初始金额（initial_cents）不是流水，按「借款合计」并入本金与余额。
 Future<void> recomputeBills(
   DatabaseExecutor db,
   Set<int> billIds, {
@@ -44,16 +45,16 @@ Future<void> recomputeBills(
   final placeholders = List.filled(billIds.length, '?').join(',');
   await db.rawUpdate('''
     UPDATE $kTableBills SET
-      principal_cents = (
-        SELECT COALESCE(SUM(amount_cents), 0) FROM $kTableTransactions
-        WHERE bill_id = $kTableBills.id AND kind = 'principal'),
+      principal_cents = $kTableBills.initial_cents + (
+        SELECT COALESCE(SUM(t.amount_cents), 0) FROM $kTableTransactions t
+        WHERE t.bill_id = $kTableBills.id AND t.kind = 'principal'),
       payment_cents = (
-        SELECT COALESCE(SUM(amount_cents), 0) FROM $kTableTransactions
-        WHERE bill_id = $kTableBills.id AND kind = 'payment'),
-      balance_cents = (
+        SELECT COALESCE(SUM(t.amount_cents), 0) FROM $kTableTransactions t
+        WHERE t.bill_id = $kTableBills.id AND t.kind = 'payment'),
+      balance_cents = $kTableBills.initial_cents + (
         SELECT COALESCE(SUM(
-          CASE WHEN kind = 'principal' THEN amount_cents ELSE -amount_cents END), 0)
-        FROM $kTableTransactions WHERE bill_id = $kTableBills.id),
+          CASE WHEN t.kind = 'principal' THEN t.amount_cents ELSE -t.amount_cents END), 0)
+        FROM $kTableTransactions t WHERE t.bill_id = $kTableBills.id),
       updated_at = COALESCE(?, updated_at)
     WHERE id IN ($placeholders)
   ''', [stampedAt, ...billIds]);
@@ -120,7 +121,7 @@ class LedgerRepo {
     final clause = where.isEmpty ? '' : ' WHERE ${where.join(' AND ')}';
 
     final rows = await db.rawQuery('''
-      SELECT c.id, c.name, c.phone, c.note, c.archived, c.created_at,
+      SELECT c.id, c.name, c.phone, c.archived, c.created_at,
              COALESCE(SUM(CASE WHEN b.direction = 'in'
                                THEN b.balance_cents ELSE 0 END), 0) AS receivable_cents,
              COALESCE(SUM(CASE WHEN b.direction = 'out'
@@ -239,14 +240,12 @@ class LedgerRepo {
   Future<int> insertContact({
     required String name,
     String? phone,
-    String? note,
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw const LedgerFailure('姓名不能为空');
     return db.insert(kTableContacts, {
       'name': trimmed,
       'phone': _clean(phone),
-      'note': _clean(note),
       'archived': 0,
       'created_at': _now(),
     });
@@ -256,14 +255,12 @@ class LedgerRepo {
     required int id,
     required String name,
     String? phone,
-    String? note,
   }) async {
     final trimmed = name.trim();
     if (trimmed.isEmpty) throw const LedgerFailure('姓名不能为空');
     await db.update(kTableContacts, {
       'name': trimmed,
       'phone': _clean(phone),
-      'note': _clean(note),
     }, where: 'id = ?', whereArgs: [id]);
   }
 
@@ -323,34 +320,46 @@ class LedgerRepo {
     required String title,
     required String direction,
     String? note,
+    int initialCents = 0,
   }) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) throw const LedgerFailure('账单名称不能为空');
     if (!isDirection(direction)) {
       throw const LedgerFailure("方向非法，只能是「别人欠我」或「我欠别人」");
     }
+    if (initialCents < 0) throw const LedgerFailure('初始金额不能为负');
     final now = _now();
-    return db.insert(kTableBills, {
-      'contact_id': contactId,
-      'title': trimmed,
-      'direction': direction,
-      'note': _clean(note),
-      'principal_cents': 0,
-      'payment_cents': 0,
-      'balance_cents': 0,
-      'created_at': now,
-      'updated_at': now,
+    return db.transaction((txn) async {
+      final id = await txn.insert(kTableBills, {
+        'contact_id': contactId,
+        'title': trimmed,
+        'direction': direction,
+        'note': _clean(note),
+        'principal_cents': 0,
+        'payment_cents': 0,
+        'balance_cents': 0,
+        'created_at': now,
+        'updated_at': now,
+        'initial_cents': initialCents,
+      });
+      await recomputeBills(txn, {id}, stampedAt: now);
+      return id;
     });
   }
 
+  /// [initialCents] 传 null 表示不改初始金额；传值（含 0）会连同派生列一起重算。
   Future<void> updateBill({
     required int id,
     required String title,
     String? note,
     String? direction,
+    int? initialCents,
   }) async {
     final trimmed = title.trim();
     if (trimmed.isEmpty) throw const LedgerFailure('账单名称不能为空');
+    if (initialCents != null && initialCents < 0) {
+      throw const LedgerFailure('初始金额不能为负');
+    }
     final values = <String, Object?>{
       'title': trimmed,
       'note': _clean(note),
@@ -362,7 +371,15 @@ class LedgerRepo {
       }
       values['direction'] = direction;
     }
-    await db.update(kTableBills, values, where: 'id = ?', whereArgs: [id]);
+    if (initialCents != null) values['initial_cents'] = initialCents;
+    if (initialCents == null) {
+      await db.update(kTableBills, values, where: 'id = ?', whereArgs: [id]);
+      return;
+    }
+    await db.transaction((txn) async {
+      await txn.update(kTableBills, values, where: 'id = ?', whereArgs: [id]);
+      await recomputeBills(txn, {id});
+    });
   }
 
   /// 改方向只在账单还没有流水时开放：已有流水时 kind 的含义会整体反转，

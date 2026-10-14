@@ -234,14 +234,7 @@ class _TxFormState extends State<_TxForm> {
                     prefixText: '¥ ',
                     hintText: '0.00',
                   ),
-                  validator: (v) {
-                    if (v == null || v.trim().isEmpty) return '请输入金额';
-                    final cents = parseYuanToCents(v);
-                    if (cents == null) {
-                      return '金额最多两位小数，且必须大于 0';
-                    }
-                    return null;
-                  },
+                  validator: (v) => yuanInputError(v ?? ''),
                 ),
                 const SizedBox(height: 12),
                 InkWell(

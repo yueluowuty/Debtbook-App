@@ -97,7 +97,6 @@ class Contact {
     required this.id,
     required this.name,
     required this.phone,
-    required this.note,
     required this.archived,
     required this.createdAt,
     this.receivableCents = 0,
@@ -111,7 +110,6 @@ class Contact {
         id: asIntOrNull(row['id']) ?? 0,
         name: asStringOrNull(row['name']) ?? '',
         phone: asStringOrNull(row['phone']),
-        note: asStringOrNull(row['note']),
         archived: (asIntOrNull(row['archived']) ?? 0) != 0,
         createdAt: asStringOrNull(row['created_at']) ?? '',
         receivableCents: asIntOrNull(row['receivable_cents']) ?? 0,
@@ -124,7 +122,6 @@ class Contact {
   final int id;
   final String name;
   final String? phone;
-  final String? note;
   final bool archived;
   final String createdAt;
 
@@ -155,6 +152,7 @@ class Bill {
     this.txCount = 0,
     this.firstDate,
     this.lastDate,
+    this.initialCents = 0,
   });
 
   factory Bill.fromRow(Map<String, Object?> row) => Bill(
@@ -171,6 +169,7 @@ class Bill {
         txCount: asIntOrNull(row['tx_count']) ?? 0,
         firstDate: asStringOrNull(row['first_date']),
         lastDate: asStringOrNull(row['last_date']),
+        initialCents: asIntOrNull(row['initial_cents']) ?? 0,
       );
 
   final int id;
@@ -186,6 +185,10 @@ class Bill {
   final int txCount;
   final String? firstDate;
   final String? lastDate;
+
+  /// 建账时的本数（先有借款关系、后补记账的部分），不是流水。
+  /// 已并入 [principalCents] 与 [balanceCents]。
+  final int initialCents;
 
   bool get isSettled => balanceCents == 0;
   bool get isOverpaid => balanceCents < 0;

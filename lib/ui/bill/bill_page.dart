@@ -9,6 +9,7 @@ import '../theme.dart';
 import '../tx/tx_sheet.dart';
 import '../widgets/empty_hint.dart';
 import '../widgets/ledger_widgets.dart';
+import '../widgets/tx_flow.dart';
 
 class BillPage extends StatefulWidget {
   const BillPage({super.key, required this.billId});
@@ -25,6 +26,10 @@ class _BillPageState extends State<BillPage> {
   List<Tx> _txs = const [];
   List<Bill> _siblings = const [];
   String? _error;
+
+  /// 详情页流水默认展开（与人员页的「全部流水」相反：来这里就是为了看流水）。
+  bool _txExpanded = true;
+  int _txPages = 1;
 
   @override
   void initState() {
@@ -246,6 +251,19 @@ class _BillPageState extends State<BillPage> {
                         ),
                       ],
                     ),
+                    // 进度条归进头部卡片：它说的就是上面这两个数的比例，
+                    // 拆在外面反而要眼睛自己去配对。
+                    if (bill.principalCents > 0) ...[
+                      const SizedBox(height: 14),
+                      RepaymentProgress(
+                        sideLabel: isIn ? '他还我' : '我还他',
+                        paid: bill.paymentCents,
+                        principal: bill.principalCents,
+                        // 跟着卡片走，不按方向硬编码：超付时整张卡已经翻成应付橙，
+                        // 条子再留一截应收绿就成了两个色系叠在一块儿。
+                        tone: tone,
+                      ),
+                    ],
                   ],
                 ),
               ),
@@ -266,15 +284,20 @@ class _BillPageState extends State<BillPage> {
               accent: pal.ink(tone),
               trailing: Text('${_txs.length} 笔',
                   style: theme.textTheme.labelMedium),
+              onTap: _txs.isEmpty
+                  ? null
+                  : () => setState(() => _txExpanded = !_txExpanded),
+              expanded: _txs.isEmpty ? null : _txExpanded,
             ),
             const SizedBox(height: 2),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(21.5, 4, 16, 8),
-              child: Text(
-                '余额 = 借款合计 − 还款合计，增删改流水后自动重算。',
-                style: theme.textTheme.bodySmall,
+            if (_txExpanded)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(21.5, 4, 16, 8),
+                child: Text(
+                  '余额含初始金额，增删改流水后自动重算。',
+                  style: theme.textTheme.bodySmall,
+                ),
               ),
-            ),
             if (_txs.isEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(12, 16, 12, 0),
@@ -288,51 +311,36 @@ class _BillPageState extends State<BillPage> {
                   ),
                 ),
               )
-            else
+            else if (_txExpanded)
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                child: TintedCard(
-                  padding: const EdgeInsets.symmetric(vertical: 2),
-                  child: Column(
-                    children: [
-                      for (var i = 0; i < _txs.length; i++) ...[
-                        if (i > 0)
-                          Padding(
-                            // 12 = TxRow 自己的横向内边距：行的左内容边就是那枚图标。
-                            padding: const EdgeInsets.only(left: 12),
-                            child: Divider(height: 1, color: pal.hairline),
-                          ),
-                        TxRow(
-                          icon: _txs[i].isPayment
-                              ? Icons.south_east
-                              : Icons.north_east,
-                          tone: _txs[i].isPayment
-                              ? Tone.payable
-                              : Tone.receivable,
-                          title: txKindLabel(bill.direction, _txs[i].kind),
-                          metaParts: [
-                            formatDateDot(_txs[i].occurredDate),
-                            _txs[i].channel,
-                            _txs[i].note,
-                          ],
-                          amount:
-                              '${txSign(_txs[i].kind)}¥${formatCents(_txs[i].amountCents)}',
-                          onTap: () => _run(() => showTxSheet(context,
-                              bill: bill,
-                              tx: _txs[i],
-                              movableTargets: _siblings)),
-                          onLongPress: () => _showTxMenu(_txs[i]),
-                        ),
-                      ],
+                child: TxFlowCard(
+                  txs: _txs,
+                  visibleCount: _txPages * kTxPageSize,
+                  rowBuilder: (tx) => TxRow(
+                    icon:
+                        tx.isPayment ? Icons.south_east : Icons.north_east,
+                    tone: tx.isPayment ? Tone.payable : Tone.receivable,
+                    title: txKindLabel(bill.direction, tx.kind),
+                    metaParts: [
+                      formatDateDot(tx.occurredDate),
+                      tx.channel,
+                      tx.note,
                     ],
+                    amount:
+                        '${txSign(tx.kind)}¥${formatCents(tx.amountCents)}',
+                    onTap: () => _run(() => showTxSheet(context,
+                        bill: bill, tx: tx, movableTargets: _siblings)),
+                    onLongPress: () => _showTxMenu(tx),
                   ),
+                  onMore: () => setState(() => _txPages++),
                 ),
               ),
           ],
         ),
       ),
       bottomNavigationBar: SafeArea(
-        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+        minimum: const EdgeInsets.fromLTRB(12, 0, 12, 20),
         child: Row(
           children: [
             Expanded(

@@ -6,7 +6,7 @@
 library;
 
 /// 对应 pubspec `version:` 中 `+` 之前的部分，也是写进 JSON 快照元数据的值。
-const String kAppVersion = '1.0.6';
+const String kAppVersion = '1.0.7';
 
 /// 对应 `+` 之后的构建号。只用于界面展示，方便说清楚装的是哪一个包。
-const String kAppBuild = '7';
+const String kAppBuild = '8';

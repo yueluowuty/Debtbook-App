@@ -5,7 +5,7 @@ import 'package:path/path.dart' as p;
 import 'package:sqflite/sqflite.dart' as sqflite;
 
 const String kDatabaseName = 'debtbook.db';
-const int kDatabaseVersion = 1;
+const int kDatabaseVersion = 2;
 
 const String kTableContacts = 'contacts';
 const String kTableBills = 'bills';
@@ -27,7 +27,13 @@ Future<sqflite.Database> openLedgerDatabase(String directory) {
     },
     onCreate: (db, version) => _createSchema(db),
     onUpgrade: (db, oldVersion, newVersion) async {
-      // 目前只有 v1；后续版本在此按 oldVersion 逐级 ALTER。
+      if (oldVersion < 2) {
+        // v2：账单加「初始金额」列（建账时已存在但来不及记的借款本数）。
+        // 新列追加在表尾，与 v2 建表语句里的位置一致，导出的列序才不会
+        // 因为「全新库 / 升级库」而分叉。
+        await db.execute(
+            'ALTER TABLE $kTableBills ADD COLUMN initial_cents INTEGER NOT NULL DEFAULT 0');
+      }
     },
   );
 }
@@ -38,6 +44,9 @@ Future<void> _createSchema(sqflite.Database db) async {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
       phone TEXT,
+      -- 借款人备注这个功能已经砍了，但列留着：老库都有它，删列要迁移且
+      -- 低版本 Android 的 SQLite 不支持 DROP COLUMN；留着还能保证
+      -- 全新库和升级库导出回来的列形状一致。
       note TEXT,
       archived INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
@@ -55,7 +64,8 @@ Future<void> _createSchema(sqflite.Database db) async {
       payment_cents INTEGER NOT NULL DEFAULT 0,
       balance_cents INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
+      updated_at TEXT NOT NULL,
+      initial_cents INTEGER NOT NULL DEFAULT 0
     )
   ''');
 

@@ -364,7 +364,7 @@ void main() {
     test('SQL 重算与校验器里的纯 Dart 重算结果一致', () async {
       final (db, repo) = await open('recompute_parity');
       final bills = [
-        billRow(10, 1, direction: directionIn),
+        billRow(10, 1, direction: directionIn, initialCents: 12345),
         billRow(11, 1, direction: directionOut),
         billRow(12, 2, direction: directionIn),
       ];
@@ -386,6 +386,7 @@ void main() {
 
       for (final row in await db.query(kTableBills, orderBy: 'id ASC')) {
         final id = row['id'] as int;
+        final initial = row['initial_cents'] as int;
         var principal = 0, payment = 0;
         for (final t in txs) {
           if (t['bill_id'] != id) continue;
@@ -395,11 +396,208 @@ void main() {
             payment += t['amount_cents'] as int;
           }
         }
-        expect(row['principal_cents'], principal, reason: 'bill $id principal');
+        expect(row['principal_cents'], initial + principal,
+            reason: 'bill $id principal');
         expect(row['payment_cents'], payment, reason: 'bill $id payment');
-        expect(row['balance_cents'], principal - payment,
+        expect(row['balance_cents'], initial + principal - payment,
             reason: 'bill $id balance');
       }
+      await db.close();
+    });
+  });
+
+  // ================================================================ 初始金额
+  group('初始金额', () {
+    test('建账带初始金额：派生列直接是本数', () async {
+      final (db, repo) = await open('initial_create');
+      final cid = await repo.insertContact(name: '张三');
+      final bid = await repo.insertBill(
+          contactId: cid,
+          title: '旧账',
+          direction: directionIn,
+          initialCents: 88000);
+      final row = await billRowOf(db, bid);
+      expect(row['initial_cents'], 88000);
+      expect(row['principal_cents'], 88000);
+      expect(row['payment_cents'], 0);
+      expect(row['balance_cents'], 88000);
+      await db.close();
+    });
+
+    test('流水在初始金额之上叠加，删光流水后回落到本数', () async {
+      final (db, repo) = await open('initial_with_txs');
+      final cid = await repo.insertContact(name: '张三');
+      final bid = await repo.insertBill(
+          contactId: cid,
+          title: '旧账',
+          direction: directionIn,
+          initialCents: 88000);
+
+      final tx1 = await repo.insertTx(
+          billId: bid,
+          kind: kindPrincipal,
+          amountCents: 10000,
+          occurredDate: '2026-02-01');
+      final tx2 = await repo.insertTx(
+          billId: bid,
+          kind: kindPayment,
+          amountCents: 30000,
+          occurredDate: '2026-02-05');
+      var row = await billRowOf(db, bid);
+      expect(row['principal_cents'], 98000);
+      expect(row['payment_cents'], 30000);
+      expect(row['balance_cents'], 68000);
+
+      await repo.deleteTx(tx1);
+      await repo.deleteTx(tx2);
+      row = await billRowOf(db, bid);
+      expect(row['principal_cents'], 88000,
+          reason: '初始金额不是流水，删流水不能把它删掉');
+      expect(row['balance_cents'], 88000);
+      await db.close();
+    });
+
+    test('编辑初始金额连派生列一起重算，可以清零', () async {
+      final (db, repo) = await open('initial_update');
+      final cid = await repo.insertContact(name: '张三');
+      final bid = await repo.insertBill(
+          contactId: cid,
+          title: '旧账',
+          direction: directionIn,
+          initialCents: 50000);
+      await repo.insertTx(
+          billId: bid,
+          kind: kindPayment,
+          amountCents: 20000,
+          occurredDate: '2026-02-01');
+      expect((await billRowOf(db, bid))['balance_cents'], 30000);
+
+      await repo.updateBill(id: bid, title: '旧账', initialCents: 10000);
+      var row = await billRowOf(db, bid);
+      expect(row['initial_cents'], 10000);
+      expect(row['principal_cents'], 10000);
+      expect(row['balance_cents'], -10000);
+
+      await repo.updateBill(id: bid, title: '旧账', initialCents: 0);
+      row = await billRowOf(db, bid);
+      expect(row['principal_cents'], 0);
+      expect(row['balance_cents'], -20000);
+
+      // 不传 initialCents 时不许碰该列。
+      await repo.updateBill(id: bid, title: '改名');
+      expect((await billRowOf(db, bid))['initial_cents'], 0);
+      await db.close();
+    });
+
+    test('负的初始金额被拒绝', () async {
+      final (db, repo) = await open('initial_negative');
+      final cid = await repo.insertContact(name: '张三');
+      await expectLater(
+        repo.insertBill(
+            contactId: cid,
+            title: 'a',
+            direction: directionIn,
+            initialCents: -1),
+        throwsA(isA<LedgerFailure>()),
+      );
+      final bid = await newBill(repo, cid);
+      await expectLater(
+        repo.updateBill(id: bid, title: 'a', initialCents: -1),
+        throwsA(isA<LedgerFailure>()),
+      );
+      await db.close();
+    });
+
+    test('v1 老库升级到 v2：补列默认 0，原有余额不动', () async {
+      // openLedgerDatabase 的入参是目录，库文件恒为 <dir>/debtbook.db，
+      // 所以老库也必须建在同一个文件名上，重开才会走 onUpgrade。
+      final dir = '${tempRoot.path}${Platform.pathSeparator}upgrade_v1';
+      final path = '$dir${Platform.pathSeparator}$kDatabaseName';
+      final old = await ffi.databaseFactoryFfi.openDatabase(
+        path,
+        options: ffi.OpenDatabaseOptions(
+          version: 1,
+          onConfigure: (db) => db.execute('PRAGMA foreign_keys = ON'),
+          onCreate: (db, _) async {
+            await db.execute('''
+              CREATE TABLE $kTableContacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL, phone TEXT, note TEXT,
+                archived INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL)''');
+            await db.execute('''
+              CREATE TABLE $kTableBills (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                contact_id INTEGER NOT NULL REFERENCES $kTableContacts(id),
+                title TEXT NOT NULL,
+                direction TEXT NOT NULL CHECK (direction IN ('in','out')),
+                note TEXT,
+                principal_cents INTEGER NOT NULL DEFAULT 0,
+                payment_cents INTEGER NOT NULL DEFAULT 0,
+                balance_cents INTEGER NOT NULL DEFAULT 0,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL)''');
+            await db.execute('''
+              CREATE TABLE $kTableTransactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                bill_id INTEGER NOT NULL REFERENCES $kTableBills(id),
+                kind TEXT NOT NULL CHECK (kind IN ('principal','payment')),
+                amount_cents INTEGER NOT NULL CHECK (amount_cents > 0),
+                occurred_date TEXT NOT NULL,
+                channel TEXT, note TEXT,
+                created_at TEXT NOT NULL, updated_at TEXT NOT NULL)''');
+          },
+        ),
+      );
+      await old.insert(kTableContacts,
+          {'name': '张三', 'archived': 0, 'created_at': '2026-01-01T00:00:00.000'});
+      await old.insert(kTableBills, {
+        'id': 7,
+        'contact_id': 1,
+        'title': '老账',
+        'direction': 'in',
+        'principal_cents': 60000,
+        'payment_cents': 20000,
+        'balance_cents': 40000,
+        'created_at': '2026-01-01T00:00:00.000',
+        'updated_at': '2026-01-01T00:00:00.000',
+      });
+      // 派生列必须由真流水背书：重算只认 transactions，
+      // 没有流水的老行会被拉平回 0，那不是升级的问题。
+      await old.insert(kTableTransactions, {
+        'bill_id': 7,
+        'kind': 'principal',
+        'amount_cents': 60000,
+        'occurred_date': '2026-01-02',
+        'created_at': '2026-01-02T00:00:00.000',
+        'updated_at': '2026-01-02T00:00:00.000',
+      });
+      await old.insert(kTableTransactions, {
+        'bill_id': 7,
+        'kind': 'payment',
+        'amount_cents': 20000,
+        'occurred_date': '2026-01-05',
+        'created_at': '2026-01-05T00:00:00.000',
+        'updated_at': '2026-01-05T00:00:00.000',
+      });
+      await old.close();
+
+      // 重新打开走 onUpgrade：老库没有 initial_cents 列，必须先证明这点。
+      final db = await openLedgerDatabase(dir);
+      opened.add(db);
+      final repo = LedgerRepo(db);
+      expect(((await db.rawQuery('PRAGMA user_version')).first.values.first), 2);
+      final row = await billRowOf(db, 7);
+      expect(row['initial_cents'], 0, reason: '老数据默认没有本数');
+      expect(row['balance_cents'], 40000, reason: '升级不许动余额');
+      // 重算后依然一致：迁移后的 SQL 口径对老行成立。
+      final tx = await repo.insertTx(
+          billId: 7,
+          kind: kindPrincipal,
+          amountCents: 5000,
+          occurredDate: '2026-02-01');
+      expect((await billRowOf(db, 7))['balance_cents'], 45000);
+      await repo.deleteTx(tx);
+      expect((await billRowOf(db, 7))['balance_cents'], 40000);
       await db.close();
     });
   });
@@ -677,12 +875,10 @@ void main() {
 
     test('可选字段前后空白被裁掉，纯空白存成 null', () async {
       final (db, repo) = await open('cleaning');
-      final cid = await repo.insertContact(
-          name: '  张三  ', phone: '  ', note: ' 备注 ');
+      final cid = await repo.insertContact(name: '  张三  ', phone: '  ');
       final contact = await repo.requireContact(cid);
       expect(contact.name, '张三');
       expect(contact.phone, isNull);
-      expect(contact.note, '备注');
       await db.close();
     });
 
@@ -904,7 +1100,7 @@ void main() {
 
     test('导出 → 导入 → 再导出，三份 dump 完全相同（往返无损）', () async {
       final (db, repo) = await open('roundtrip');
-      final a = await repo.insertContact(name: '张三', phone: '138', note: '老同学');
+      final a = await repo.insertContact(name: '张三', phone: '138');
       final b = await repo.insertContact(name: '李四');
       final billA = await newBill(repo, a, title: '装修');
       final billB = await newBill(repo, b,

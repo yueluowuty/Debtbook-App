@@ -395,7 +395,8 @@ class IconBadge extends StatelessWidget {
 
 /// 一笔流水的行。人员页时间线与账单页流水表共用同一行式，
 /// 免得两处字号、配色、对齐各长一套。
-/// 固定两行：第一行「标题 + 右上角金额」，第二行整宽的「时间 · 渠道 · 备注」。
+/// 图标在左、与文字整体上下居中；右侧固定两行：
+/// 「标题 + 同行右端金额」和「时间 · 渠道 · 备注」，两行左边缘对齐。
 class TxRow extends StatelessWidget {
   const TxRow({
     super.key,
@@ -422,61 +423,63 @@ class TxRow extends StatelessWidget {
     final theme = Theme.of(context);
     final row = Padding(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        // 图标跟右侧两行文字整体上下居中；标题和描述同属一列，
+        // 所以描述的左边缘天然与标题齐平。
         children: [
-          Row(
-            children: [
-              if (icon != null) ...[
-                Container(
-                  width: 26,
-                  height: 26,
-                  decoration: BoxDecoration(
-                    color: pal.soft(tone),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(icon, size: 15, color: pal.onSoft(tone)),
+          if (icon != null) ...[
+            Container(
+              width: 26,
+              height: 26,
+              decoration: BoxDecoration(
+                color: pal.soft(tone),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 15, color: pal.onSoft(tone)),
+            ),
+            const SizedBox(width: 10),
+          ],
+          Expanded(
+            child: Column(
+              // min 是必须的：Column 默认 max，会把整行撑到父级给的最大高，
+              // 于是左边那枚图标以为自己居中、其实居中到了十万八千里外。
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    // 标题让位、金额不让位：金额是非 flex 孩子，先按自然宽排掉，
+                    // 标题拿剩下的并且省略号。这样金额永远保持原字号（和标题一模一样），
+                    // 又始终贴着卡片右边缘；换成 Flexible/FittedBox 会被缩成另一种字号。
+                    Expanded(
+                      child: Text(
+                        title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      amount,
+                      maxLines: 1,
+                      // 与标题同一行、同一字号，只靠颜色和字重分主次。
+                      style: theme.textTheme.titleSmall?.copyWith(
+                        color: pal.ink(tone),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-              ],
-              Expanded(
-                child: Text(
-                  title,
+                // 放得下就一行写完；放不下折成省略号，免得行高被撑乱。
+                MetaLine(
+                  gap: 2,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: theme.textTheme.titleSmall,
+                  parts: metaParts,
                 ),
-              ),
-              const SizedBox(width: 8),
-              // 必须是 Expanded 而不是 Flexible：两者默认 flex 都是 1、都只分到一半空间，
-              // 但 Flexible 不要求填满，金额就停在槽位起点、没贴到行的右边缘。
-              // 也不能退回非 flex 孩子 —— Row 给非 flex 孩子无限宽主约束，
-              // 裸 Text 里的 FittedBox 永远不会缩放，长金额直接顶穿行宽。
-              // 金额要落在第一行的右上角，靠的就是这两条。
-              Expanded(
-                child: FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    amount,
-                    maxLines: 1,
-                    style: theme.textTheme.titleSmall?.copyWith(
-                      color: pal.ink(tone),
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          // 第二行是 Column 的直接孩子，不再被左边那半个宽度卡着，
-          // 于是整行宽度都归它，时间 · 渠道 · 备注 放得下的比原来多得多。
-          // 放不下时仍折成一行加省略号，免得这列变两行把行高撑乱。
-          MetaLine(
-            gap: 2,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            parts: metaParts,
+              ],
+            ),
           ),
         ],
       ),
@@ -567,6 +570,80 @@ class ToneChoice extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// 归还进度条。人员页与账单详情页共用。
+/// 只画比例：金额上方卡片已经给过，这里不再重复标注，也不套独立卡片。
+class RepaymentProgress extends StatelessWidget {
+  const RepaymentProgress({
+    super.key,
+    required this.sideLabel,
+    required this.paid,
+    required this.principal,
+    required this.tone,
+  });
+
+  /// 「他还我」/「我还他」，同时决定标题后缀口径。
+  final String sideLabel;
+  final int paid;
+  final int principal;
+  final Tone tone;
+
+  @override
+  Widget build(BuildContext context) {
+    final pal = LedgerPalette.of(context);
+    final theme = Theme.of(context);
+    // 百分比留在整数分里算，只有进度条那一步才要 double。
+    final percent = (paid * 100) ~/ principal;
+    final String percentText;
+    if (percent > 100) {
+      // 超付不报真实倍数（曾经画出过「110788%」这种数）：条子已经画满，
+      // 多出来多少由头部卡片的负余额去说，这儿只需要表明「过线了」。
+      percentText = '100%+';
+    } else if (percent == 0) {
+      percentText = paid > 0 ? '<1%' : '0%';
+    } else {
+      percentText = '$percent%';
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '归还进度 · $sideLabel',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.labelMedium
+                    ?.copyWith(color: pal.meta),
+              ),
+            ),
+            Text(
+              percentText,
+              style: theme.textTheme.titleMedium?.copyWith(
+                color: pal.ink(tone),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(6),
+          child: LinearProgressIndicator(
+            // 超付时条子画满；百分比同样封顶在 100（上面写 100%+）。
+            value: percent > 100 ? 1 : percent / 100,
+            minHeight: 8,
+            // 不能用 pal.soft(tone)：账单详情页把它放进了同色的头部卡片里，
+            // 轨道会跟卡片底色融为一体。半透明墨色在白底和彩底上都看得见。
+            backgroundColor: pal.ink(tone).withValues(alpha: .16),
+            valueColor: AlwaysStoppedAnimation<Color>(pal.ink(tone)),
+          ),
+        ),
+      ],
     );
   }
 }

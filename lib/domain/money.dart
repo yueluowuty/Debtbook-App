@@ -7,25 +7,45 @@ const int kMaxYuanPerTx = 100000000;
 
 final RegExp _yuanPattern = RegExp(r'^\d*(?:\.\d{1,2})?$');
 
+/// 剥掉空白和千分位（中英文逗号都认）。
+String _scrub(String input) =>
+    input.trim().replaceAll(RegExp(r'[,，\s]'), '');
+
+/// 只吃 _scrub + _yuanPattern 都过关的串：溢出（手滑打十几位）返回 null。
+int? _yuanToCents(String scrubbed) {
+  final dot = scrubbed.indexOf('.');
+  final intText = dot < 0 ? scrubbed : scrubbed.substring(0, dot);
+  final fracText = dot < 0 ? '' : scrubbed.substring(dot + 1);
+  final yuan = int.tryParse(intText.isEmpty ? '0' : intText);
+  if (yuan == null) return null;
+  return yuan * 100 + int.parse(fracText.isEmpty ? '0' : fracText.padRight(2, '0'));
+}
+
 /// 把用户输入的「元」解析成「分」。
 /// 返回 null 表示非法输入：空、负数、三位以上小数、非数字、零、超过上限。
 int? parseYuanToCents(String input) {
-  final s = input.trim().replaceAll(RegExp(r'[,，\s]'), '');
-  if (s.isEmpty || s == '.') return null;
+  final s = _scrub(input);
   if (s.startsWith('-') || s.startsWith('+')) return null;
   if (!_yuanPattern.hasMatch(s)) return null;
-
-  final dot = s.indexOf('.');
-  final intText = dot < 0 ? s : s.substring(0, dot);
-  final fracText = dot < 0 ? '' : s.substring(dot + 1);
-
-  final yuan = int.tryParse(intText.isEmpty ? '0' : intText);
-  if (yuan == null) return null;
-  final cents = int.parse(fracText.isEmpty ? '0' : fracText.padRight(2, '0'));
-
-  final total = yuan * 100 + cents;
-  if (total <= 0 || total > kMaxYuanPerTx * 100) return null;
+  final total = _yuanToCents(s);
+  if (total == null || total <= 0 || total > kMaxYuanPerTx * 100) return null;
   return total;
+}
+
+/// 金额输入框的报错文案，和 [parseYuanToCents] 同一套规则。
+/// 分开说是必要的：以前 2000 亿和 1.234 都回一句「最多两位小数，且必须大于 0」，
+/// 手滑多打零的人完全看不出自己错在哪一条。
+String? yuanInputError(String input) {
+  if (parseYuanToCents(input) != null) return null;
+  final s = _scrub(input);
+  if (s.isEmpty) return '请输入金额';
+  if (s.startsWith('-') || s.startsWith('+')) return '金额不能为负，收还是付请在上面选';
+  if (!_yuanPattern.hasMatch(s)) return '金额最多两位小数';
+  final total = _yuanToCents(s);
+  if (total == null || total > kMaxYuanPerTx * 100) {
+    return '单笔最大 ¥${formatCentsCompact(kMaxYuanPerTx * 100)}，是不是多打了零';
+  }
+  return '金额必须大于 0';
 }
 
 /// 千分位格式化，如 123450 -> '1,234.50'，-123450 -> '-1,234.50'。

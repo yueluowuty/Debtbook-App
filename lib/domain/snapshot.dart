@@ -7,7 +7,8 @@ import 'dart:convert';
 import 'models.dart';
 
 /// 快照格式版本。只升不降：文件版本高于 App 支持版本时拒绝导入。
-const int kSchemaVersion = 1;
+/// v2：账单行新增 initial_cents；v1 文件缺该列，导入时按 0 兼容。
+const int kSchemaVersion = 2;
 
 const String kSnapshotKeyContacts = 'contacts';
 const String kSnapshotKeyBills = 'bills';
@@ -75,12 +76,14 @@ List<Map<String, Object?>> withRecomputedBills(
       () {
         final id = asIntOrNull(b['id']);
         final t = id == null ? kZeroBillTotals : (totals[id] ?? kZeroBillTotals);
+        // 初始金额不是流水，与 repo.recomputeBills 同口径并入本金与余额。
+        final initial = asIntOrNull(b['initial_cents']) ?? 0;
         // 展开后覆盖同名键不会改变键的顺序，导出列序仍与库表一致。
         return <String, Object?>{
           ...b,
-          'principal_cents': t.principal,
+          'principal_cents': initial + t.principal,
           'payment_cents': t.payment,
-          'balance_cents': t.principal - t.payment,
+          'balance_cents': initial + t.principal - t.payment,
         };
       }(),
   ];
