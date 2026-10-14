@@ -1142,6 +1142,100 @@ void main() {
       expect(await dump(), first, reason: '再走一遍仍然不变，说明幂等');
       await db.close();
     });
+
+    test('带初始金额的账本走一遍真实文件往返：本数不会在导入时丢掉', () async {
+      // 上面那条往返测试的账单初始金额全是 0，正好绕开了 v2 新增的那一列。
+      // 这里把三种形态都摆上，重点是「只有本数、一条流水都没有」的旧账：
+      // 它的余额完全由 initial_cents 撑着，导入器一旦把这列漏了，
+      // 用户看到的就是余额归零，而且是悄无声息地归零。
+      final (db, repo) = await open('roundtrip_initial');
+      final cid = await repo.insertContact(name: '张三');
+      final onlyInitial = await repo.insertBill(
+          contactId: cid,
+          title: '口头旧账',
+          direction: directionIn,
+          initialCents: 88000);
+      final mixed = await repo.insertBill(
+          contactId: cid,
+          title: '装修',
+          direction: directionIn,
+          initialCents: 30000);
+      final txOnly = await repo.insertBill(
+          contactId: cid, title: '买车', direction: directionOut);
+      await seed(repo, mixed, [
+        (kindPrincipal, 500000, '2026-01-01'),
+        (kindPayment, 100000, '2026-02-01'),
+      ]);
+      await seed(repo, txOnly, [(kindPrincipal, 300000, '2026-04-01')]);
+
+      Future<List<Map<String, Object?>>> dump(String table) =>
+          repo.dumpTable(table);
+      final billsBefore = await dump(kTableBills);
+      expect(
+          billsBefore.firstWhere((b) => b['id'] == onlyInitial)['balance_cents'],
+          88000);
+
+      // 走完整的「写成文件 → 读回文件」形状，中间不经手任何内存对象。
+      final file = File('${tempRoot.path}${Platform.pathSeparator}backup.json');
+      await file.writeAsString(encodeSnapshot(buildSnapshot(
+        contacts: await dump(kTableContacts),
+        bills: billsBefore,
+        transactions: await dump(kTableTransactions),
+        appVersion: '1.0.7',
+        exportedAt: '2026-10-15T10:00:00.000',
+      )));
+
+      // 目标库先清空，模拟换机恢复或「导入前先把当前数据清掉」。
+      await repo.replaceAll(validateSnapshot(consistentSnapshot(
+        contacts: const [],
+        bills: const [],
+        transactions: const [],
+      )).data!);
+      expect(await repo.allBills(), isEmpty);
+
+      final validated = validateSnapshot(jsonDecode(await file.readAsString()));
+      expect(validated.ok, isTrue, reason: validated.errors.join('\n'));
+      expect(validated.data!.warnings, isEmpty,
+          reason: '自己导出的文件不该被判成派生列漂移');
+      await repo.replaceAll(validated.data!);
+
+      expect(await dump(kTableBills), billsBefore);
+      expect((await repo.requireBill(onlyInitial)).balanceCents, 88000,
+          reason: '纯本数账：余额就是初始金额，导入后必须还在');
+      expect((await repo.requireBill(onlyInitial)).initialCents, 88000);
+      expect((await repo.requireBill(mixed)).initialCents, 30000);
+      expect((await repo.requireBill(mixed)).principalCents, 530000);
+      await db.close();
+    });
+
+    test('v1 老备份（借款人带 note、账单没有 initial_cents）能导入', () async {
+      // 备注功能下线后库里那列还留着，但导出白名单已经不认它了。
+      // 这条守住两件事：旧文件不能因为多一个键就被拒；
+      // 导入后那列必须是空的，而不是把旧备注悄悄留在库里再被别处读出来。
+      final (db, repo) = await open('import_v1_legacy');
+      final result = validateSnapshot(consistentSnapshot(
+        contacts: [
+          contactRow(1)
+            ..['note'] = '以前记的备注'
+            ..remove('archived'),
+        ],
+        bills: [billRow(10, 1)..remove('initial_cents')],
+        transactions: [
+          txRow(100, 10, amountCents: 500000, occurredDate: '2026-01-01')
+        ],
+      ));
+
+      expect(result.ok, isTrue, reason: result.errors.join('\n'));
+      expect(result.data!.bills.single['initial_cents'], 0);
+      await repo.replaceAll(result.data!);
+
+      final contact = (await db.query(kTableContacts)).single;
+      expect(contact['name'], '张三');
+      expect(contact['note'], isNull, reason: '旧备注应被丢弃，而不是落库');
+      expect((await repo.requireBill(10)).initialCents, 0);
+      expect((await repo.requireBill(10)).balanceCents, 500000);
+      await db.close();
+    });
   });
 }
 

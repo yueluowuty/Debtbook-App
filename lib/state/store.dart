@@ -31,6 +31,11 @@ class LedgerStore extends ChangeNotifier {
   List<Contact> contacts = const [];
   int archivedCount = 0;
 
+  /// 未归档的借款人总数，与搜索和方向筛选都无关。
+  /// 首页「全部」那一段要报的是这个数，不是筛完之后剩下几个人 ——
+  /// 后者会让同一个按钮上的数字随筛选状态自己跳。
+  int contactTotal = 0;
+
   HomeFilter filter = HomeFilter.all;
   String search = '';
   bool includeArchived = false;
@@ -51,9 +56,10 @@ class LedgerStore extends ChangeNotifier {
     ]);
     totals = results[0] as LedgerTotals;
     contacts = results[1] as List<Contact>;
+    contactTotal = results[3] as int;
     // 归档数与搜索/方向筛选无关，必须由两条 COUNT 相减得到；
     // 用「总数 − 可见数」会把被筛掉的正常人也算成归档。
-    archivedCount = (results[2] as int) - (results[3] as int);
+    archivedCount = (results[2] as int) - contactTotal;
     loading = false;
     notifyListeners();
   }

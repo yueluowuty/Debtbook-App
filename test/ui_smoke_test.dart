@@ -100,8 +100,9 @@ void main() {
     expect(find.text('添加第一个借款人'), findsOneWidget);
   });
 
-  testWidgets('顶部三块统计卡渲染出来，不溢出也不塌陷', (tester) async {
+  testWidgets('顶部筛选条三段渲染出来，不溢出也不塌陷', (tester) async {
     await pump(tester, const HomePage());
+    expect(find.text('全部'), findsOneWidget);
     expect(find.text('别人欠我'), findsOneWidget);
     expect(find.text('我欠别人'), findsOneWidget);
     expect(find.text('净差'), findsOneWidget);
@@ -109,9 +110,10 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('统计卡金额再长也只是缩小，不许出现省略号', (tester) async {
-    // 三块卡各占屏宽三分之一。模拟器实跑时 ¥1,500.00 就被截成了「¥1,500....」，
-    // 而上面那条用例是空账本 ¥0.00，永远碰不到这个宽度，所以必须造真实大额。
+  testWidgets('筛选条金额再长也只是缩小，不许出现省略号', (tester) async {
+    // 三段各占屏宽三分之一（比原来两段时更挤）。模拟器实跑时 ¥1,500.00
+    // 就被截成过「¥1,500....」，而上面那条用例是空账本 ¥0.00，
+    // 永远碰不到这个宽度，所以必须造真实大额。
     tester.view.physicalSize = const Size(1080, 2400);
     tester.view.devicePixelRatio = 2.625;
     addTearDown(tester.view.resetPhysicalSize);
@@ -396,6 +398,10 @@ void main() {
 
     expect(store.contacts.length, 2);
     await pump(tester, const HomePage());
+    // 进页面默认就是「全部」，且这一段报的是总人数 —— 不是筛完剩下的行数。
+    expect(store.filter, HomeFilter.all);
+    expect(find.text('全部'), findsOneWidget);
+    expect(find.text('2 人'), findsOneWidget);
     await tester.tap(find.text('我欠别人'));
     await act(tester, () async {
       for (var i = 0; i < 50; i++) {
@@ -407,6 +413,19 @@ void main() {
 
     expect(store.filter, HomeFilter.payable);
     expect(store.contacts, isEmpty);
+
+    // 点得进去也要点得回来：以前「全部」只是初始值，界面上没有任何入口，
+    // 一旦按过方向就只能靠清空搜索或者重开 App 才能回到全部。
+    await tester.tap(find.text('全部'));
+    await act(tester, () async {
+      for (var i = 0; i < 50; i++) {
+        await Future<void>.delayed(const Duration(milliseconds: 100));
+        await tester.pump();
+        if (store.contacts.length == 2) break;
+      }
+    });
+    expect(store.filter, HomeFilter.all);
+    expect(store.contacts.length, 2);
   });
 }
 

@@ -75,10 +75,13 @@ class _DataPageState extends State<DataPage> {
   // ------------------------------------------------------------- 导入
 
   Future<void> _pickAndImport() async {
+    // 不按扩展名过滤。导出走分享面板另存到 Downloads 时，接收方会把显示名
+    // 截到 20 个字符，`debtbook_20261015_023456.json` 于是变成
+    // `debtbook_20261015_02` —— 自己刚导出的文件反而选不中。
+    // 「这是不是本 App 的快照」由 validateSnapshot 按内容判定，
+    // 选错文件的代价是一句明确的报错，不是静默失败。
     final picked = await FilePicker.pickFile(
       dialogTitle: '选择要导入的快照文件',
-      type: FileType.custom,
-      allowedExtensions: const ['json'],
     );
     if (picked == null) return;
     await _guard(() async {

@@ -208,29 +208,9 @@ class _HeaderBanner extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 16),
-              IntrinsicHeight(
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Expanded(
-                      child: _MiniStat(
-                        label: '别人欠我',
-                        value: '¥${formatCentsCompact(t.receivableCents)}',
-                        active: store.filter == HomeFilter.receivable,
-                        onTap: () => onTapFilter(HomeFilter.receivable),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: _MiniStat(
-                        label: '我欠别人',
-                        value: '¥${formatCentsCompact(t.payableCents)}',
-                        active: store.filter == HomeFilter.payable,
-                        onTap: () => onTapFilter(HomeFilter.payable),
-                      ),
-                    ),
-                  ],
-                ),
+              _FilterSegments(
+                store: store,
+                onTap: onTapFilter,
               ),
             ],
           ),
@@ -240,58 +220,149 @@ class _HeaderBanner extends StatelessWidget {
   }
 }
 
-class _MiniStat extends StatelessWidget {
-  const _MiniStat({
-    required this.label,
-    required this.value,
-    required this.active,
-    required this.onTap,
-  });
+/// 一个筛选段：口径 + 显示用的量。
+class _Segment {
+  const _Segment(this.filter, this.label, this.value);
+  final HomeFilter filter;
   final String label;
   final String value;
-  final bool active;
-  final VoidCallback onTap;
+}
+
+/// 三段筛选：全部 / 别人欠我 / 我欠别人。
+///
+/// 原来只有后两段，点进去就出不来 —— 「全部」明明是列表的默认状态，
+/// 界面上却没有任何入口回到它。现在它是第一段，并且每一段都带上自己那个量
+/// （全部带人数，另两段带金额），所以这一行同时是数字面板和筛选器。
+/// 选中块在三层之间滑动而不是各画各的高亮框：这样它读起来是一个控件，
+/// 不是三张长得很像的卡。
+class _FilterSegments extends StatelessWidget {
+  const _FilterSegments({required this.store, required this.onTap});
+
+  final LedgerStore store;
+  final ValueChanged<HomeFilter> onTap;
+
+  /// 轨道内边距与圆角。高度不写死：系统字号拉到 1.6 倍时
+  /// 这一行必须跟着长，而不是把里面的文字挤出去。
+  static const double _gap = 4;
+  static const double _minSlotHeight = 44;
+  static const Duration _anim = Duration(milliseconds: 220);
 
   @override
   Widget build(BuildContext context) {
+    final pal = LedgerPalette.of(context);
     final theme = Theme.of(context);
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: active ? .26 : .12),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: Colors.white.withValues(alpha: active ? .6 : .18),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              label,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: theme.textTheme.labelMedium
-                  ?.copyWith(color: Colors.white70),
-            ),
-            const SizedBox(height: 3),
-            FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.centerLeft,
-              child: Text(
-                value,
-                maxLines: 1,
-                style: theme.textTheme.titleMedium
-                    ?.copyWith(color: Colors.white),
+    final t = store.totals;
+    // 开着「显示归档」时列表里也有归档的人，这段的数就得算上他们，
+    // 否则点「全部」看到的人数比按钮上写的多。
+    final people =
+        store.contactTotal + (store.includeArchived ? store.archivedCount : 0);
+
+    final segments = <_Segment>[
+      _Segment(HomeFilter.all, '全部', '$people 人'),
+      _Segment(HomeFilter.receivable, '别人欠我',
+          '¥${formatCentsCompact(t.receivableCents)}'),
+      _Segment(
+          HomeFilter.payable, '我欠别人', '¥${formatCentsCompact(t.payableCents)}'),
+    ];
+    final selected = segments.indexWhere((s) => s.filter == store.filter);
+    // 三段等宽，所以选中块只要按段序平移：0 → 贴左，n-1 → 贴右。
+    final indicatorAlignment =
+        -1.0 + 2.0 * selected / (segments.length - 1);
+
+    return Container(
+      padding: const EdgeInsets.all(_gap),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: .14),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: Colors.white.withValues(alpha: .12)),
+      ),
+      child: Stack(
+        clipBehavior: Clip.antiAlias,
+        children: [
+          // 选中块画在文字底下。用 AnimatedAlign + FractionallySizedBox
+          // 而不是 AnimatedPositioned：后者要先知道槽宽，
+          // 一写死宽度就没法跟着字号长高了。
+          Positioned.fill(
+            child: AnimatedAlign(
+              duration: _anim,
+              curve: Curves.easeOutCubic,
+              alignment: Alignment(indicatorAlignment, 0),
+              child: FractionallySizedBox(
+                widthFactor: 1 / segments.length,
+                heightFactor: 1,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: pal.heroA.withValues(alpha: .30),
+                        blurRadius: 12,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
-          ],
-        ),
+          ),
+          Row(
+            children: [
+              for (var i = 0; i < segments.length; i++)
+                Expanded(
+                  child: InkWell(
+                    onTap: () => onTap(segments[i].filter),
+                    borderRadius: BorderRadius.circular(14),
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                          minHeight: _minSlotHeight),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 7),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            AnimatedDefaultTextStyle(
+                              duration: _anim,
+                              style: (theme.textTheme.labelMedium ??
+                                      const TextStyle())
+                                  .copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: i == selected
+                                    ? pal.heroA.withValues(alpha: .78)
+                                    : Colors.white70,
+                              ),
+                              child: Text(segments[i].label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis),
+                            ),
+                            const SizedBox(height: 2),
+                            // 三段各占三分之一，宽字号（1.6 倍）下金额
+                            // 必然放不下：只能整块缩，不能截成「¥21.9」。
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: AnimatedDefaultTextStyle(
+                                duration: _anim,
+                                style: (theme.textTheme.titleMedium ??
+                                        const TextStyle())
+                                    .copyWith(
+                                  fontWeight: FontWeight.w700,
+                                  color: i == selected
+                                      ? pal.heroA
+                                      : Colors.white,
+                                ),
+                                child: Text(segments[i].value, maxLines: 1),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }

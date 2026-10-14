@@ -56,3 +56,6 @@ app.*.map.json
 
 # 视觉验收截图（从旧镜像目录抢救回来的，仅本机留档）
 /tool/devrun/shots/
+
+# agent 侧视觉验收的临时截图/裁剪图，不进版本库
+/.qoder-scratch/
